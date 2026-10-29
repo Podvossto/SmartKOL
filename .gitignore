@@ -29,7 +29,8 @@ next-env.d.ts
 *.db
 *.sqlite
 *.sqlite3
-data/cache/
+data/
+*.key
 
 # Feasibility spike scripts (local only)
 spike/

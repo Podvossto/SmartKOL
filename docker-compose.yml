@@ -4,8 +4,10 @@ services:
     env_file:
       - path: credential/.env
         required: false
+    volumes:
+      - smartkol-data:/app/data
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   frontend:
     build:
@@ -15,4 +17,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  smartkol-data:
