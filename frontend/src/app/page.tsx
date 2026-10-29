@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { BackendStatus } from "@/components/backend-status";
+import { buttonVariants } from "@/components/ui/button";
 
 export default function Home() {
   return (
@@ -8,6 +11,9 @@ export default function Home() {
         Match brands with Thai TikTok creators — จับคู่แบรนด์กับครีเอเตอร์ TikTok ไทย
       </p>
       <BackendStatus />
+      <Link href="/settings" className={buttonVariants({ variant: "outline", className: "self-start" })}>
+        Settings
+      </Link>
     </main>
   );
 }
