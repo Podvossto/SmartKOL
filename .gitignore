@@ -30,7 +30,9 @@ next-env.d.ts
 *.sqlite
 *.sqlite3
 data/cache/
-spike/output/
+
+# Feasibility spike scripts (local only)
+spike/
 
 # OS / editor
 .DS_Store
