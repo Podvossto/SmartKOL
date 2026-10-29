@@ -1,0 +1,39 @@
+# Secrets — never commit (only the example template is tracked)
+credential/*
+!credential/.env.example
+.env
+.env.*
+!.env.example
+
+# Local-only project files
+SSOT.md
+Assignment/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local data / caches
+*.db
+*.sqlite
+*.sqlite3
+data/cache/
+spike/output/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
