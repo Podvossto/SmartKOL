@@ -1,3 +1,5 @@
+import { request } from "./http";
+
 export type Provider = "openrouter" | "anthropic" | "custom";
 
 export type SettingsView = {
@@ -24,6 +26,8 @@ export type ApifyAccount = {
   cycle_end: string | null;
 };
 
+export type LlmBalance = { usage_usd: number | null; limit_usd: number | null; remaining_usd: number | null };
+
 export type LlmPing = {
   model: string;
   reply: string;
@@ -33,20 +37,7 @@ export type LlmPing = {
   cost_usd: number | null;
 };
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api/settings${path}`, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const detail = data?.detail;
-    throw new Error(typeof detail === "string" ? detail : "Request failed");
-  }
-  return data as T;
-}
+const call = <T>(method: string, path: string, body?: unknown) => request<T>(method, `/api/settings${path}`, body);
 
 export const settingsApi = {
   get: () => call<SettingsView>("GET", ""),
@@ -61,6 +52,7 @@ export const settingsApi = {
     base_url?: string;
   }) => call<SettingsView>("PUT", "/llm", body),
   clearLlm: () => call<SettingsView>("DELETE", "/llm"),
+  llmBalance: () => call<LlmBalance>("POST", "/llm/balance"),
   testLlm: () => call<LlmPing>("POST", "/llm/test"),
   exchangeOpenRouter: (code: string, code_verifier: string) =>
     call<SettingsView>("POST", "/openrouter/exchange", { code, code_verifier }),

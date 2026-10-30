@@ -4,18 +4,24 @@ import { cn } from "cn"
 function Card({
   className,
   size = "default",
+  children,
   ...props
 }: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+  // Double bezel: a faint tray holding a lighter core, like a glass plate set into aluminium.
   return (
-    <div
-      data-slot="card"
-      data-size={size}
-      className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
-        className
-      )}
-      {...props}
-    />
+    <div className="h-full rounded-[1.75rem] bg-primary/[0.04] p-1.5 ring-1 ring-black/[0.05]">
+      <div
+        data-slot="card"
+        data-size={size}
+        className={cn(
+          "group/card flex h-full flex-col gap-(--card-spacing) overflow-hidden rounded-[calc(1.75rem-0.375rem)] bg-card py-(--card-spacing) text-sm text-card-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_16px_36px_-18px_rgba(20,40,120,0.22)] [--card-spacing:--spacing(5)] has-data-[slot=card-footer]:pb-0 data-[size=sm]:[--card-spacing:--spacing(4)]",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    </div>
   )
 }
 
