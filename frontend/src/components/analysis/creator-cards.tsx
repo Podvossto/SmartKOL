@@ -8,6 +8,7 @@ import type { Creator } from "@/lib/analysis-api";
 import { formatCount } from "@/lib/format";
 
 import { CreatorAvatar, VideoCover } from "./creator-avatar";
+import { viewsOf } from "./creator-sort";
 import { KindBadge } from "./kind-badge";
 import { creatorHref } from "./creator-table";
 
@@ -52,7 +53,7 @@ function CreatorCard({ analysisId, creator: c }: { analysisId: string; creator: 
           <b className="font-medium text-foreground">{formatCount(c.followers)}</b> followers
         </span>
         <span>
-          <b className="font-medium text-foreground">{formatCount(c.median_views)}</b> typical views
+          <b className="font-medium text-foreground">{formatCount(viewsOf(c))}</b> typical views
         </span>
         <span>Thai {Math.round(c.thai_share * 100)}%</span>
       </p>
