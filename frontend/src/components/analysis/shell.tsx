@@ -14,6 +14,7 @@ import { WizardStepper } from "@/components/wizard-stepper";
 import { analysisTitle, sourceLabels } from "@/lib/analysis-title";
 import { usd } from "@/lib/format";
 import { settingsApi } from "@/lib/settings-api";
+import { cn } from "@/lib/utils";
 import { type StepKey, activeStep } from "@/lib/steps";
 
 import { AnalysisContext } from "./context";
@@ -45,9 +46,14 @@ function Spend({ apifyUsd, llmUsd, llmKnown, model }: { apifyUsd: number; llmUsd
 const BACK: Record<StepKey, { label: string; href: (id: string) => string }> = {
   brand: { label: "Back to home", href: () => "/" },
   profile: { label: "Back to home", href: () => "/" },
-  creators: { label: "Back to profile", href: (id) => `/analysis/${id}` },
-  results: { label: "Back to creators", href: (id) => `/analysis/${id}/creators` },
+  search: { label: "Back to profile", href: (id) => `/analysis/${id}` },
+  creators: { label: "Back to search", href: (id) => `/analysis/${id}/search` },
 };
+
+/** One creator's page sits under the list, so going back leads to the list, not further. */
+function backTarget(pathname: string, id: string, step: StepKey) {
+  return /\/creators\/[^/]+$/.test(pathname) ? { label: "Back to creators", href: `/analysis/${id}/creators` } : { label: BACK[step].label, href: BACK[step].href(id) };
+}
 
 /** Frame shared by every step of an analysis: who it's about, where you are, what it has cost so far. */
 export function AnalysisShell({ children }: { children: React.ReactNode }) {
@@ -73,8 +79,8 @@ export function AnalysisShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AnalysisContext.Provider value={{ analysis, adopt }}>
-      <div className="flex flex-col gap-8 pt-4">
-        <BackLink href={BACK[activeStep(pathname, analysis)].href(analysis.id)} label={BACK[activeStep(pathname, analysis)].label} className="-mb-4" />
+      <div className={cn("mx-auto flex w-full flex-col gap-8 pt-4 transition-[max-width] duration-500", pathname.endsWith("/creators") ? "max-w-6xl" : "max-w-4xl")}>
+        <BackLink {...backTarget(pathname, analysis.id, activeStep(pathname, analysis))} className="-mb-4" />
         <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
           <div className="flex min-w-0 items-center gap-4">
             <BrandLogo id={analysis.id} hasLogo={analysis.has_logo} name={title} className="size-14 text-2xl" />

@@ -22,7 +22,7 @@ export function useAnalysis(id: string) {
         const next = await analysisApi.get(id);
         if (cancelled) return;
         setAnalysis(next);
-        if (next.status === "running" || next.status === "profiling") timer = setTimeout(poll, POLL_MS);
+        if (next.status === "running" || next.status === "profiling" || next.creators.status === "running") timer = setTimeout(poll, POLL_MS);
       } catch (err) {
         if (!cancelled) setError(errorMessage(err));
       }

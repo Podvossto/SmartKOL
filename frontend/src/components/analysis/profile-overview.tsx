@@ -217,7 +217,7 @@ export function ProfileOverview() {
 
       <Rise index={6} className="flex flex-wrap items-center justify-between gap-4 border-t border-border/70 pt-6">
         <p className="text-sm text-muted-foreground">Next: choose the hashtags to search on TikTok.</p>
-        <PillButton onClick={() => router.push(STEPS.find((s) => s.key === "creators")!.href(analysis.id))}>Continue to creators</PillButton>
+        <PillButton onClick={() => router.push(STEPS.find((s) => s.key === "search")!.href(analysis.id))}>Continue to search</PillButton>
       </Rise>
     </div>
   );

@@ -9,7 +9,7 @@ const STEPS = [
   },
   {
     name: "Filter",
-    text: "Keeps public accounts that post mostly in Thai, were active in the last 30 days and have at least 10K followers. Each filter can be switched off.",
+    text: "Keeps public accounts that post mostly in Thai and have at least 10K followers. Each filter can be switched off. How recently someone posted is judged after their recent videos are read, because a hashtag search shows only one video per creator.",
   },
   {
     name: "Read",
