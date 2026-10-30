@@ -7,7 +7,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, ValidationError, field_validator, model_validator
 
-from . import llm
+from . import llm, prompts
 from .clients import UpstreamError
 from .config import LlmConfig
 
@@ -157,6 +157,16 @@ JSON shape:
 "by_source": {"website": {"summary": str, "key_points": [str]}, "facebook": {"summary": str, "key_points": [str]}}}"""
 
 
+prompts.register(prompts.Prompt(
+    id="brand_brief",
+    title="Brand brief",
+    description="How the AI reads a brand's website and Facebook page and writes the brief that guides the creator search: positioning, audience, voice, ideal creator and hashtags.",
+    used_when="Each time a brand is analysed.",
+    default=SYSTEM,
+    marker="- Reply with ONE JSON object and nothing else",
+))
+
+
 def build_evidence(site_pages: list[dict], facebook: dict | None, posts: list[dict]) -> str:
     parts = []
     for page in site_pages:
@@ -217,9 +227,10 @@ def build_profile(
     sources = ({"website"} if site_pages else set()) | ({"facebook"} if facebook else set())
     usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "calls": 0, "model": cfg.model}
     problem = ""
+    system = prompts.system("brand_brief")
     for _ in range(2):
         prompt = user if not problem else f"{user}\n\nYour previous reply was rejected ({problem}). Reply again with the complete JSON object."
-        out = llm.complete(http, cfg, SYSTEM, prompt, max_tokens=8000)
+        out = llm.complete(http, cfg, system, prompt, max_tokens=8000)
         usage["calls"] += 1
         usage["input_tokens"] += out.input_tokens or 0
         usage["output_tokens"] += out.output_tokens or 0

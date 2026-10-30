@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from . import analyses, apify_runner, config, llm, logos, media
+from . import analyses, apify_runner, config, llm, logos, media, prompts
 from .clients import UpstreamError
 
 ACTOR = "clockworks/tiktok-scraper"
@@ -187,6 +187,16 @@ Use only what is given. Reply with ONE JSON array and nothing else, one object p
 [{"u": "<username>", "kind": "creator"|"shop"|"media"|"other", "competitor": bool, "reason": str}]"""
 
 
+prompts.register(prompts.Prompt(
+    id="account_sorting",
+    title="Creators or shops",
+    description="How the AI tells a creator who could promote the brand from a shop, a brand or a media page, and which shops count as competitors.",
+    used_when="After each TikTok search, for every account found.",
+    default=CLASSIFY_SYSTEM,
+    marker="Reply with ONE JSON array and nothing else",
+))
+
+
 def _account_line(c: dict) -> str:
     captions = " / ".join(s["text"] for s in c["samples"][:2] if s.get("text"))
     return f"@{c['username']} | {c['followers']} followers | name: {c['nickname']} | bio: {' '.join(c['bio'].split())[:200]} | captions: {captions[:240]}"
@@ -198,9 +208,10 @@ def classify(http: httpx.Client, cfg, profile: dict, creators: list[dict]) -> tu
     usage = {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "model": cfg.model}
     brand = f"Brand: {profile['brand_name']}. Category: {profile['category']}. Sells: {', '.join(profile['products'][:6])}."
     sorted_out: dict[str, dict] = {}
+    system = prompts.system("account_sorting")
     for start in range(0, len(creators), CLASSIFY_BATCH):
         batch = creators[start : start + CLASSIFY_BATCH]
-        out = llm.complete(http, cfg, CLASSIFY_SYSTEM, brand + "\n\nAccounts:\n" + "\n".join(_account_line(c) for c in batch), max_tokens=8000)
+        out = llm.complete(http, cfg, system, brand + "\n\nAccounts:\n" + "\n".join(_account_line(c) for c in batch), max_tokens=8000)
         usage["input_tokens"] += out.input_tokens or 0
         usage["output_tokens"] += out.output_tokens or 0
         usage["cost_usd"] += out.cost_usd or 0.0

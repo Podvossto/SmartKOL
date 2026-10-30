@@ -6,6 +6,7 @@ from app import brand
 from app.clients import UpstreamError
 from app.config import LlmConfig
 from app.llm import Completion
+from tests.helpers import DataDirTestCase
 
 CFG = LlmConfig("openrouter", "openai", "https://openrouter.ai/api/v1", "k", "anthropic/claude-haiku-5.5", "manual", "ui")
 
@@ -94,7 +95,7 @@ class PromptTest(unittest.TestCase):
         self.assertIn("first few", rule)  # a lean search only uses the first tags, so their order matters
 
 
-class BuildProfileTest(unittest.TestCase):
+class BuildProfileTest(DataDirTestCase):
     def test_retries_once_and_sums_usage(self):
         with mock.patch.object(brand.llm, "complete", side_effect=[reply("not json", cost=0.002), reply(VALID, cost=0.003)]) as m:
             profile, usage = brand.build_profile(mock.Mock(), CFG, [{"url": "u", "text": "t"}], None, [])

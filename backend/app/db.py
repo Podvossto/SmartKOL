@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS analysis_logos (
     analysis_id TEXT PRIMARY KEY, content_type TEXT NOT NULL, data BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS analysis_media (
     analysis_id TEXT NOT NULL, key TEXT NOT NULL, content_type TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (analysis_id, key));
+CREATE TABLE IF NOT EXISTS app_settings (
+    name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS apify_cache (
     key TEXT PRIMARY KEY, items TEXT NOT NULL, usd REAL NOT NULL, created_at TEXT NOT NULL);
 """

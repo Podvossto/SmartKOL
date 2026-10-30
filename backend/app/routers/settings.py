@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
-from .. import clients, config, secrets_store
+from .. import brand, clients, config, discovery, prompts, secrets_store  # brand and discovery register their prompts
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -192,3 +192,41 @@ def openrouter_exchange(body: ExchangeIn, http: httpx.Client = Depends(get_http)
         {"provider": "openrouter", "protocol": protocol, "base_url": base_url, "api_key": key, "model": model, "auth": "oauth"},
     )
     return _view()
+
+
+class PromptIn(BaseModel):
+    text: str
+
+
+def _prompt_view(prompt: prompts.Prompt) -> dict:
+    text, edited = prompts.instructions(prompt.id)
+    return {"id": prompt.id, "title": prompt.title, "description": prompt.description, "used_when": prompt.used_when,
+            "text": text, "default": prompt.default_instructions, "edited": edited, "output_format": prompt.output_format}
+
+
+@router.get("/prompts")
+def list_prompts() -> list[dict]:
+    """The instructions given to the model. Only the instructions are editable; the output format stays fixed."""
+    return [_prompt_view(p) for p in prompts.all_prompts()]
+
+
+@router.put("/prompts/{prompt_id}")
+def save_prompt(prompt_id: str, body: PromptIn) -> dict:
+    try:
+        prompt = prompts.get(prompt_id)
+        prompts.save(prompt_id, body.text)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="No such prompt")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _prompt_view(prompt)
+
+
+@router.delete("/prompts/{prompt_id}")
+def reset_prompt(prompt_id: str) -> dict:
+    try:
+        prompt = prompts.get(prompt_id)
+        prompts.reset(prompt_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="No such prompt")
+    return _prompt_view(prompt)

@@ -7,6 +7,7 @@ import json
 from app import analyses, apify_runner, discovery
 from app.clients import UpstreamError
 from app.llm import Completion
+from tests.helpers import DataDirTestCase
 from tests.test_analyses import SITE, ApiTestCase
 
 NOW = datetime.now(timezone.utc)
@@ -113,7 +114,7 @@ def labelled(**kinds):
     return reply
 
 
-class ClassifyTest(unittest.TestCase):
+class ClassifyTest(DataDirTestCase):
     CFG = mock.Mock(model="test-model")
     PROFILE = {"brand_name": "After You", "category": "Dessert cafe", "products": ["toast"]}
 

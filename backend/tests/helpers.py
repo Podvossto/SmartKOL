@@ -1,5 +1,9 @@
 """A throwaway local web server, so browser-facing code is tested against real HTTP and a real Chromium."""
+import os
+import tempfile
 import threading
+import unittest
+from unittest import mock
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -30,3 +34,14 @@ def serve(routes: dict):
     finally:
         server.shutdown()
         server.server_close()
+
+
+class DataDirTestCase(unittest.TestCase):
+    """For code that reads or writes the database (prompts, settings): every test gets its own, so none touches real data."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        env = mock.patch.dict(os.environ, {"SMARTKOL_DATA_DIR": self.tmp.name})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(self.tmp.cleanup)
