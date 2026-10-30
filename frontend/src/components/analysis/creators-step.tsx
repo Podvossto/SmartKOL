@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { buttonVariants } from "@/components/ui/button";
-import { type CreatorFilters, type CreatorList, analysisApi } from "@/lib/analysis-api";
+import { type CreatorFilters, type CreatorList, type Weights, analysisApi } from "@/lib/analysis-api";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ import { SORT_LABELS, type Sort, type SortKey, sortCreators } from "./creator-so
 import { CreatorTable } from "./creator-table";
 import { EmptyState, Rise } from "./panel";
 import { RankPanel } from "./rank-panel";
+import { WeightsBar } from "./weights-bar";
 
 const PAGE = 20;
 type View = "table" | "cards";
@@ -57,6 +58,13 @@ export function CreatorsStep() {
     analysisApi.creators(analysis.id, filters).then(setListing).catch((err) => setError(errorMessage(err)));
   }, [analysis.id, filters]);
 
+  const reweigh = (w: Weights) =>
+    analysisApi
+      .setWeights(analysis.id, w)
+      .then(() => analysisApi.creators(analysis.id, filters))
+      .then((data) => (setListing(data), setError(null)))
+      .catch((err) => setError(errorMessage(err)));
+
   if (found === 0) {
     return (
       <EmptyState title="No creators yet" text="Run a search first. The creators it finds are listed here.">
@@ -89,6 +97,11 @@ export function CreatorsStep() {
       <Rise index={1}>
         <RankPanel creators={sorted} onScored={showRanking} />
       </Rise>
+      {scored && listing && (
+        <Rise index={1}>
+          <WeightsBar weights={listing.weights} onChange={reweigh} />
+        </Rise>
+      )}
       <Rise index={1}>
         <CreatorFilterPanel filters={filters} onChange={change} dropped={listing?.dropped} />
       </Rise>

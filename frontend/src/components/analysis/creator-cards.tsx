@@ -28,6 +28,12 @@ function CreatorCard({ analysisId, creator: c }: { analysisId: string; creator: 
             <KindBadge creator={c} />
           </p>
         </div>
+        {c.total != null && (
+          <span className="flex flex-col items-end leading-none" title={`Rank #${c.rank} by total score`}>
+            <span className="font-heading text-xl font-semibold tabular-nums">{c.total}</span>
+            <span className="text-[10px] text-muted-foreground">#{c.rank}</span>
+          </span>
+        )}
         <a href={c.url} target="_blank" rel="noreferrer" aria-label={`Open @${c.username} on TikTok`} className="relative z-10 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
           <ExternalLink className="size-4" />
         </a>

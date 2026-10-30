@@ -13,6 +13,7 @@ import { formatCount, timeAgo } from "@/lib/format";
 
 import { useCurrentAnalysis } from "./context";
 import { CreatorAvatar, VideoCover } from "./creator-avatar";
+import { CreatorScores } from "./creator-scores";
 import { KindBadge } from "./kind-badge";
 import { Origin } from "./origin";
 import { ChipList, EmptyState, Eyebrow, Rise } from "./panel";
@@ -92,13 +93,35 @@ export function CreatorDetail() {
         </Rise>
       )}
 
+      {creator.score && (
+        <Rise index={2}>
+          <CreatorScores creator={creator} />
+        </Rise>
+      )}
+
       <Rise index={2}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Followers" value={formatCount(creator.followers)} />
-          <Stat label="Typical views" value={formatCount(creator.median_views)} note={`Middle of ${creator.videos_found} video${creator.videos_found === 1 ? "" : "s"} found`} />
-          <Stat label="Thai captions" value={`${Math.round(creator.thai_share * 100)}%`} />
-          <Stat label="Total likes" value={formatCount(creator.likes)} note={`${formatCount(creator.total_videos)} videos posted`} />
-        </div>
+        {creator.metrics ? (
+          <section className="flex flex-col gap-3">
+            <Eyebrow>Latest {creator.metrics.videos} videos</Eyebrow>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Followers" value={formatCount(creator.followers)} />
+              <Stat label="Typical views" value={formatCount(creator.metrics.median_views)} note="Middle of the latest videos" />
+              <Stat label="Engagement rate" value={creator.metrics.median_er != null ? `${(creator.metrics.median_er * 100).toFixed(1)}%` : "—"} note="Likes, comments and shares per view" />
+              <Stat label="Posts a week" value={creator.metrics.posts_per_week != null ? String(creator.metrics.posts_per_week) : "—"} note={`Last post ${timeAgo(creator.metrics.last_post)}`} />
+              <Stat label="Ads" value={`${Math.round(creator.metrics.ad_share * 100)}%`} note="Marked as an ad or sponsored" />
+              <Stat label="TikTok Shop" value={`${Math.round(creator.metrics.shop_share * 100)}%`} note="Videos with a shop product" />
+              <Stat label="Thai captions" value={`${Math.round(creator.thai_share * 100)}%`} note="In the search results" />
+              <Stat label="Total likes" value={formatCount(creator.likes)} note={`${formatCount(creator.total_videos)} videos posted`} />
+            </div>
+          </section>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Followers" value={formatCount(creator.followers)} />
+            <Stat label="Typical views" value={formatCount(creator.median_views)} note={`Middle of ${creator.videos_found} video${creator.videos_found === 1 ? "" : "s"} found`} />
+            <Stat label="Thai captions" value={`${Math.round(creator.thai_share * 100)}%`} />
+            <Stat label="Total likes" value={formatCount(creator.likes)} note={`${formatCount(creator.total_videos)} videos posted`} />
+          </div>
+        )}
       </Rise>
 
       <Rise index={3}>
