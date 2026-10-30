@@ -12,6 +12,8 @@ import { timeAgo } from "@/lib/format";
 
 const VISIBLE = 3;
 const NEEDS_ATTENTION = { running: "In progress", profiling: "In progress", awaiting_facebook: "Needs your input", error: "Failed", done: "" } as const;
+/** Absolute start time, e.g. "30 Oct, 14:05", so analyses of the same brand can be told apart. */
+const startedAt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 
 /** Past analyses: reopening one is free (everything is cached), and each can be deleted for good. */
 export function RecentList() {
@@ -42,7 +44,10 @@ export function RecentList() {
         <Link href={`/analysis/${item.id}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl">
           <BrandLogo id={item.id} hasLogo={item.has_logo} name={item.title} className="size-10 text-base" />
           <span className="min-w-0">
-            <span className="block truncate font-medium">{item.title}</span>
+            <span className="flex items-baseline gap-2">
+              <span className="min-w-0 truncate font-medium">{item.title}</span>
+              <time dateTime={item.created_at} className="shrink-0 text-xs tabular-nums text-muted-foreground">{startedAt.format(new Date(item.created_at))}</time>
+            </span>
             <span className="block truncate text-xs text-muted-foreground">{meta}</span>
           </span>
         </Link>

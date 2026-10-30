@@ -9,6 +9,7 @@ import { formatCount } from "@/lib/format";
 
 import { CreatorAvatar, VideoCover } from "./creator-avatar";
 import { viewsOf } from "./creator-sort";
+import { FlagBadge } from "./flag-badge";
 import { KindBadge } from "./kind-badge";
 import { creatorHref } from "./creator-table";
 
@@ -27,6 +28,7 @@ function CreatorCard({ analysisId, creator: c }: { analysisId: string; creator: 
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <span className="truncate">{c.nickname}</span>
             <KindBadge creator={c} />
+            <FlagBadge creator={c} />
           </p>
         </div>
         {c.total != null && (
@@ -52,8 +54,8 @@ function CreatorCard({ analysisId, creator: c }: { analysisId: string; creator: 
         <span>
           <b className="font-medium text-foreground">{formatCount(c.followers)}</b> followers
         </span>
-        <span>
-          <b className="font-medium text-foreground">{formatCount(viewsOf(c))}</b> typical views
+        <span title={c.metrics ? undefined : "From one video found in the search: not read yet"}>
+          <b className={`font-medium ${c.metrics ? "text-foreground" : ""}`}>{formatCount(viewsOf(c))}</b> typical views
         </span>
         <span>Thai {Math.round(c.thai_share * 100)}%</span>
       </p>

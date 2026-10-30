@@ -14,7 +14,7 @@ const RUBRIC = [
 
 function Axis({ title, hint, value, estimated, ai, model, children }: { title: string; hint: string; value: number; estimated?: boolean; ai?: boolean; model?: string | null; children: React.ReactNode }) {
   return (
-    <li className="grid gap-3 px-6 py-5 sm:grid-cols-[11rem_1fr] sm:gap-6">
+    <li className="grid min-w-0 grid-cols-1 gap-3 px-5 py-5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-6 sm:px-6">
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium" title={hint}>
           {title}
@@ -35,7 +35,7 @@ export function CreatorScores({ creator: c }: { creator: Creator }) {
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Eyebrow>Score</Eyebrow>
-        <p className="flex items-baseline gap-2">
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           {c.rank != null && <span className="text-sm text-muted-foreground">#{c.rank} in this list</span>}
           <span className="font-heading text-3xl font-semibold tabular-nums">{c.total}</span>
           <span className="text-sm text-muted-foreground">/ 100 with your weights</span>

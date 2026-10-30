@@ -126,7 +126,7 @@ export function RankPanel({ creators, onScored }: { creators: Creator[]; onScore
                     </option>
                   ))}
                 </select>
-                in the list below, then score them.
+                found by the search, then score them.
               </p>
               <p className="text-sm text-muted-foreground" aria-live="polite">
                 {tooBig && `That is ${names.length * videos} videos. One read takes at most ${MAX_VIDEOS}.`}

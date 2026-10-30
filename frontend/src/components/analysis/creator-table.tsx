@@ -8,6 +8,7 @@ import { formatCount, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { CreatorAvatar } from "./creator-avatar";
+import { FlagBadge } from "./flag-badge";
 import { KindBadge } from "./kind-badge";
 import { type Sort, type SortKey, viewsOf } from "./creator-sort";
 import { ScoreCell } from "./score-cell";
@@ -24,7 +25,7 @@ const BASE: Column[] = [
 // Shown once creators have been read and scored; the four axes only from a wide screen, the total always.
 const SCORED: Column[] = [{ key: "total", label: "Score" }];
 const AXES: Column[] = [
-  { key: "relevance", label: "Fit", className: "hidden lg:table-cell" },
+  { key: "relevance", label: "Brand fit", className: "hidden lg:table-cell" },
   { key: "engagement", label: "Engagement", className: "hidden xl:table-cell" },
   { key: "audience", label: "Audience*", className: "hidden xl:table-cell" },
   { key: "activity", label: "Activity", className: "hidden xl:table-cell" },
@@ -86,6 +87,7 @@ export function CreatorTable({ analysisId, creators, sort, onSort }: { analysisI
                     <span className="flex items-center gap-1.5">
                       <span className="truncate font-medium">{c.nickname}</span>
                       <KindBadge creator={c} />
+                      <FlagBadge creator={c} />
                     </span>
                     <span className="truncate text-xs text-muted-foreground">@{c.username}</span>
                   </span>
@@ -100,7 +102,7 @@ export function CreatorTable({ analysisId, creators, sort, onSort }: { analysisI
                 </td>
               )}
               <td className="px-4 py-3 tabular-nums">{formatCount(c.followers)}</td>
-              <td className="px-4 py-3 tabular-nums">{formatCount(viewsOf(c))}</td>
+              <td className={`px-4 py-3 tabular-nums ${read && !c.metrics ? "text-muted-foreground/60" : ""}`} title={read && !c.metrics ? "From one video found in the search: not read yet" : undefined}>{formatCount(viewsOf(c))}</td>
               {!scored && <td className="hidden px-4 py-3 tabular-nums sm:table-cell">{Math.round(c.thai_share * 100)}%</td>}
               <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{timeAgo(c.metrics?.last_post ?? c.last_post)}</td>
               {read && <td className="hidden px-4 py-3 tabular-nums md:table-cell">{c.metrics?.median_er != null ? `${(c.metrics.median_er * 100).toFixed(1)}%` : "—"}</td>}

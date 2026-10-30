@@ -20,7 +20,7 @@ export function Origin({ kind, model, className }: { kind: keyof typeof KINDS; m
       {label}
       <span
         role="tooltip"
-        className="pointer-events-none absolute left-0 top-full z-30 mt-1.5 w-52 translate-y-1 rounded-2xl bg-foreground px-3.5 py-2.5 text-xs font-normal leading-relaxed text-background opacity-0 shadow-[0_16px_40px_-12px_rgba(10,20,60,0.45)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-y-0 group-hover:opacity-100 group-focus:translate-y-0 group-focus:opacity-100"
+        className="pointer-events-none absolute left-0 top-full z-30 mt-1.5 w-44 translate-y-1 sm:w-52 rounded-2xl bg-foreground px-3.5 py-2.5 text-xs font-normal leading-relaxed text-background opacity-0 shadow-[0_16px_40px_-12px_rgba(10,20,60,0.45)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-y-0 group-hover:opacity-100 group-focus:translate-y-0 group-focus:opacity-100"
       >
         {tip}
       </span>

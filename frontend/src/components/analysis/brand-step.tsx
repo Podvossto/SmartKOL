@@ -33,10 +33,10 @@ function Failed({ message, onRetry }: { message: string | null; onRetry: () => P
     <Card className="animate-rise [--card-spacing:--spacing(7)]">
       <div className="flex flex-col gap-4 px-(--card-spacing)">
         <h2 className="font-heading text-xl font-semibold tracking-tight">That didn&apos;t work</h2>
-        <p className="text-[15px]" role="alert">
+        <p className="break-words text-[15px]" role="alert">
           {message}
         </p>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="break-words text-sm text-destructive">{error}</p>}
         <div className="flex flex-wrap gap-3">
           <Button onClick={retry} disabled={busy}>
             {busy ? "Retrying…" : "Try again"}

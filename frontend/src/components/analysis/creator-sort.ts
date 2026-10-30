@@ -5,7 +5,7 @@ export type Sort = { key: SortKey; dir: "asc" | "desc" };
 
 export const SORT_LABELS: Record<SortKey, string> = {
   total: "Total score",
-  relevance: "Relevance",
+  relevance: "Brand fit",
   engagement: "Engagement score",
   audience: "Audience fit",
   activity: "Activity",

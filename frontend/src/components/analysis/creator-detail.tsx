@@ -20,9 +20,9 @@ import { ChipList, EmptyState, Eyebrow, Rise } from "./panel";
 
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-3xl bg-white/70 p-5 ring-1 ring-black/[0.05]">
+    <div className="flex min-w-0 flex-col gap-1 rounded-3xl bg-white/70 p-4 ring-1 ring-black/[0.05] sm:p-5">
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="font-heading text-2xl font-semibold tabular-nums">{value}</span>
+      <span className="font-heading text-xl font-semibold tabular-nums break-words sm:text-2xl">{value}</span>
       {note && <span className="text-xs text-muted-foreground">{note}</span>}
     </div>
   );
@@ -62,26 +62,26 @@ export function CreatorDetail() {
     <div className="flex flex-col gap-6">
       <Rise>
         <div className="flex flex-wrap items-center gap-5">
-          <CreatorAvatar analysisId={analysis.id} creator={creator} className="size-20 text-3xl" />
-          <div className="min-w-0 flex-1">
+          <CreatorAvatar analysisId={analysis.id} creator={creator} className="size-20 shrink-0 text-3xl" />
+          <div className="min-w-0 flex-1 basis-40">
             <h2 className="flex items-center gap-2 font-heading text-2xl font-semibold tracking-tight">
               <span className="truncate">{creator.nickname}</span>
               {creator.verified && <BadgeCheck className="size-5 shrink-0 text-primary" aria-label="Verified" />}
             </h2>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
-              <span className="flex items-center gap-1.5">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 break-words text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-1.5 break-all">
                 <PlatformIcon platform="tiktok" className="size-3.5" /> @{creator.username}
               </span>
               <KindBadge creator={creator} always />
             </p>
             {creator.kind && creator.kind_reason && (
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-                {creator.kind_reason}
+                <span className="min-w-0 break-words">{creator.kind_reason}</span>
                 <Origin kind="ai" model={analysis.cost.llm_model} />
               </p>
             )}
           </div>
-          <a href={creator.url} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
+          <a href={creator.url} target="_blank" rel="noreferrer" className={`${buttonVariants({ variant: "outline" })} w-full sm:w-auto`}>
             Open on TikTok <ExternalLink className="size-4" />
           </a>
         </div>
@@ -89,7 +89,7 @@ export function CreatorDetail() {
 
       {creator.bio && (
         <Rise index={1}>
-          <p className="rounded-3xl bg-white/70 px-6 py-5 text-[15px] leading-relaxed ring-1 ring-black/[0.05]">{creator.bio}</p>
+          <p className="rounded-3xl bg-white/70 px-6 py-5 text-[15px] leading-relaxed break-words ring-1 ring-black/[0.05]">{creator.bio}</p>
         </Rise>
       )}
 
@@ -127,7 +127,7 @@ export function CreatorDetail() {
       <Rise index={3}>
         <section className="flex flex-col gap-3">
           <Eyebrow>Videos found under the hashtags</Eyebrow>
-          <ul className="grid gap-3 sm:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {creator.samples.map((s, i) => (
               <li key={i} className="flex flex-col overflow-hidden rounded-3xl bg-white/80 ring-1 ring-black/[0.06]">
                 <div className="relative">

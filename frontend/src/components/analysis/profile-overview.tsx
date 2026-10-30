@@ -137,7 +137,7 @@ export function ProfileOverview() {
   const fit = profile.creator_fit;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 [overflow-wrap:anywhere]">
       {banner && (
         <Rise>
           <BrandBanner analysisId={analysis.id} item={banner} />
@@ -165,7 +165,12 @@ export function ProfileOverview() {
           <dl className="divide-y divide-border/70 rounded-3xl bg-white/70 ring-1 ring-black/[0.05]">
             <FactRow label="Products & services">{list(profile.products.map(brief))}</FactRow>
             <FactRow label="Audience">
-              {[age(profile.audience.age_range), gender(profile.audience.gender)].filter(Boolean).length > 0 && <span>{[age(profile.audience.age_range), gender(profile.audience.gender)].filter(Boolean).join(" · ")}</span>}
+              {[age(profile.audience.age_range), gender(profile.audience.gender)].filter(Boolean).length > 0 && (
+                <span>
+                  {[age(profile.audience.age_range), gender(profile.audience.gender)].filter(Boolean).join(" · ")}
+                  <span className="ml-1.5 text-xs text-muted-foreground">estimated</span>
+                </span>
+              )}
               <span className="text-muted-foreground">Interested in {list(profile.audience.interests)}</span>
             </FactRow>
             <FactRow label="Tone of voice">{list(profile.voice.traits)}</FactRow>

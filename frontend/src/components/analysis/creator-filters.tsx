@@ -11,7 +11,7 @@ const SIZES: { name: string; range: string; min: number; max: number }[] = [
   { name: "Nano", range: "under 10K", min: 0, max: 10_000 },
   { name: "Micro", range: "10K–100K", min: 10_000, max: 100_000 },
   { name: "Mid", range: "100K–500K", min: 100_000, max: 500_000 },
-  { name: "Macro", range: "500K–1M", min: 500_000, max: 1_000_000 },
+  { name: "Macro", range: "500K–1M", min: 500_000, max: 999_999 },
   { name: "Mega", range: "1M+", min: 1_000_000, max: 0 },
 ];
 

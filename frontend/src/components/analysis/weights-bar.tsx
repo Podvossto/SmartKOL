@@ -8,7 +8,7 @@ import type { Axis, Weights } from "@/lib/analysis-api";
 import { cn } from "@/lib/utils";
 
 export const AXIS_LABELS: Record<Axis, { name: string; hint: string }> = {
-  relevance: { name: "Fit with the brand", hint: "How well the creator's category, style and products match the brand. Judged by the AI; brand safety can cap it." },
+  relevance: { name: "Brand fit", hint: "How well the creator's category, style and products match the brand. Judged by the AI; brand safety can cap it." },
   engagement: { name: "Engagement", hint: "Likes, comments and shares per view, and views per follower, compared with creators of the same size in this search. Computed from their latest videos." },
   audience: { name: "Audience fit (estimated)", hint: "Whether the creator's audience looks like the brand's target. The AI's estimate from their content: TikTok does not show who watches." },
   activity: { name: "Activity", hint: "How often they post, how recently, how many videos are ads, and how steady their views are. Computed from their latest videos." },

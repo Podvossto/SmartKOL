@@ -95,7 +95,7 @@ export function CreatorsStep() {
         </p>
       )}
       <Rise index={1}>
-        <RankPanel creators={sorted} onScored={showRanking} />
+        <RankPanel creators={listing?.kept ?? []} onScored={showRanking} />
       </Rise>
       {scored && listing && (
         <Rise index={1}>
