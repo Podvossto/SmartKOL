@@ -3,7 +3,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
-from .. import analyses, brand, clients, config, discovery, logos, media, preflight
+from .. import analyses, brand, clients, config, discovery, enrichment, logos, media, preflight
 from ..social import normalize_facebook, validate_public_url
 from .settings import get_http
 
@@ -23,6 +23,11 @@ class PlanItem(BaseModel):
 
 class SearchIn(BaseModel):
     plan: list[PlanItem]  # which hashtags to search and how many videos to read from each
+
+
+class EnrichIn(BaseModel):
+    usernames: list[str]
+    videos: int = enrichment.DEFAULT_VIDEOS
 
 
 class ConfirmIn(BaseModel):
@@ -231,6 +236,46 @@ def creators(aid: str, thai_min: float = 0.6, skip_private: bool = True, max_age
     filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None, skip_shops)
     kept, dropped = discovery.apply_filters(found, filters)
     return {"total": len(found), "kept": [discovery.public_creator(c) for c in kept], "dropped": dropped}
+
+
+def _enrich_args(aid: str, body: EnrichIn) -> tuple[dict, list[str]]:
+    state = _get(aid)
+    try:
+        return state, enrichment.clean(body.usernames, body.videos, {c["username"] for c in state["creators"]["items"]})
+    except enrichment.EnrichError as exc:
+        raise _problem(str(exc), "usernames")
+
+
+@router.post("/{aid}/creators/enrich/estimate")
+def enrich_estimate(aid: str, body: EnrichIn, http: httpx.Client = Depends(get_http)) -> dict:
+    """What reading the chosen creators' latest videos would cost, and how many Apify credits are left."""
+    _, names = _enrich_args(aid, body)
+    token, _ = config.apify_token()
+    account = None
+    if token:
+        try:
+            account = clients.apify_account(http, token)
+        except (clients.UpstreamError, httpx.HTTPError):
+            account = None
+    return {"estimate": enrichment.estimate(names, body.videos), "account": account}
+
+
+@router.post("/{aid}/creators/enrich")
+def enrich(aid: str, body: EnrichIn, http: httpx.Client = Depends(get_http)) -> dict:
+    state, names = _enrich_args(aid, body)
+    if state["creators"]["status"] == "running" or state["creators"]["enrich"].get("status") == "running":
+        raise _problem("A search or a read is already running.", status=409)
+    token, _ = config.apify_token()
+    if not token:
+        raise _problem("Apify token is not set. Add it in Settings first.")
+    cost = enrichment.estimate(names, body.videos)
+    try:
+        left = clients.apify_account(http, token)["remaining_usd"]
+    except (clients.UpstreamError, httpx.HTTPError):
+        left = None
+    if left is not None and cost["usd"] > left:
+        raise _problem(f"This read needs about ${cost['usd']:.2f} but only ${left:.2f} of Apify credit is left.")
+    return analyses.public(enrichment.start(aid, names, body.videos))
 
 
 def _creator(aid: str, username: str) -> dict:
