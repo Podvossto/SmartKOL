@@ -24,38 +24,57 @@ NO_DOWNLOADS = {"shouldDownloadVideos": False, "shouldDownloadCovers": False, "s
                 "shouldDownloadSlideshowImages": False, "shouldDownloadMusicCovers": False}
 
 
-@dataclass(frozen=True)
-class Preset:
-    """How wide one search is: the first `hashtags` of the user's list, `per_tag` newest videos each."""
-    hashtags: int
-    per_tag: int
-    label: str
+MAX_PER_TAG = 100
+MAX_TOTAL = 500  # videos in one search: a slip of the finger should not cost more than about $2
 
 
-PRESETS = {
-    "lean": Preset(3, 25, "Lean"),
-    "full": Preset(6, 40, "Full"),
-}
+class PlanError(ValueError):
+    """The requested search is not allowed. The message is shown to the user as it is."""
+
+
+def clean_plan(items: list[tuple[str, int]]) -> list[dict]:
+    """The user's choice of hashtags and how many videos to read from each, made safe: no '#', no spaces, each
+    hashtag once, a hashtag with 0 videos is simply not searched."""
+    plan, seen = [], set()
+    for tag, videos in items:
+        tag = "".join(tag.split()).lstrip("#")
+        if not tag or tag.lower() in seen or videos <= 0:
+            continue
+        if not re.search(r"\w", tag):  # e.g. "????": a garbled tag would be searched, and paid for, for nothing
+            raise PlanError(f"'{tag}' is not a hashtag: it has no letters or digits.")
+        if videos > MAX_PER_TAG:
+            raise PlanError(f"At most {MAX_PER_TAG} videos per hashtag.")
+        seen.add(tag.lower())
+        plan.append({"hashtag": tag, "videos": videos})
+    if not plan:
+        raise PlanError("Choose at least one hashtag and how many videos to read from it.")
+    if sum(p["videos"] for p in plan) > MAX_TOTAL:
+        raise PlanError(f"At most {MAX_TOTAL} videos in one search.")
+    return plan
 
 
 # ---------- cost ----------
 
-def plan(profile: dict, preset: str) -> tuple[list[str], dict]:
-    """The hashtags a search would use, and the run input."""
-    p = PRESETS[preset]
-    tiktok = profile["tiktok"]
-    tags = [t.lstrip("#") for t in tiktok["hashtags_th"] + tiktok["hashtags_en"]][: p.hashtags]
-    return tags, {"hashtags": tags, "resultsPerPage": p.per_tag, **NO_DOWNLOADS}
+def runs(plan: list[dict]) -> list[dict]:
+    """The actor takes one video count per run, so hashtags with the same count share a run."""
+    groups: dict[int, list[str]] = {}
+    for item in plan:
+        groups.setdefault(item["videos"], []).append(item["hashtag"])
+    return [{"hashtags": tags, "resultsPerPage": n, **NO_DOWNLOADS} for n, tags in sorted(groups.items(), reverse=True)]
 
 
-def estimate(profile: dict, preset: str) -> dict:
-    """What a search costs before it runs. Served from the cache it costs nothing."""
-    tags, run_input = plan(profile, preset)
-    if not tags:
-        return {"preset": preset, "hashtags": [], "videos": 0, "usd": 0.0, "cached": False}
-    videos = len(tags) * PRESETS[preset].per_tag
-    cached = apify_runner.is_cached(ACTOR, run_input)
-    return {"preset": preset, "hashtags": tags, "videos": videos, "usd": 0.0 if cached else round(videos * RESULT_USD + START_USD, 4), "cached": cached}
+def estimate(plan: list[dict]) -> dict:
+    """What a search costs before it runs: every video, plus the start fee of each run. A run already in the cache is
+    free; `list_usd` is what the same search would cost with nothing cached."""
+    usd, list_usd, cached = 0.0, 0.0, True
+    for run_input in runs(plan):
+        price = len(run_input["hashtags"]) * run_input["resultsPerPage"] * RESULT_USD + START_USD
+        list_usd += price
+        if not apify_runner.is_cached(ACTOR, run_input):
+            cached = False
+            usd += price
+    return {"plan": plan, "hashtags": [p["hashtag"] for p in plan], "videos": sum(p["videos"] for p in plan),
+            "runs": len(runs(plan)), "usd": round(usd, 4), "list_usd": round(list_usd, 4), "cached": cached}
 
 
 # ---------- privacy ----------
@@ -154,7 +173,7 @@ def group_creators(videos: list[dict]) -> list[dict]:
 # ---------- who is a creator ----------
 
 KINDS = ("creator", "shop", "media", "other")
-CLASSIFY_BATCH = 40
+CLASSIFY_BATCH = 25  # the model spends part of its output budget thinking, so a batch must leave it room
 CLASSIFY_SYSTEM = """You sort TikTok accounts for an influencer-marketing agency. The agency wants individual CREATORS who could promote the brand below, and wants to leave out businesses, above all the brand's competitors.
 
 For each account decide "kind":
@@ -181,18 +200,19 @@ def classify(http: httpx.Client, cfg, profile: dict, creators: list[dict]) -> tu
     sorted_out: dict[str, dict] = {}
     for start in range(0, len(creators), CLASSIFY_BATCH):
         batch = creators[start : start + CLASSIFY_BATCH]
-        out = llm.complete(http, cfg, CLASSIFY_SYSTEM, brand + "\n\nAccounts:\n" + "\n".join(_account_line(c) for c in batch), max_tokens=4000)
+        out = llm.complete(http, cfg, CLASSIFY_SYSTEM, brand + "\n\nAccounts:\n" + "\n".join(_account_line(c) for c in batch), max_tokens=8000)
         usage["input_tokens"] += out.input_tokens or 0
         usage["output_tokens"] += out.output_tokens or 0
         usage["cost_usd"] += out.cost_usd or 0.0
         usage["model"] = out.model
-        left, right = out.text.find("["), out.text.rfind("]")
-        try:
-            rows = json.loads(out.text[left : right + 1]) if 0 <= left < right else []
-        except ValueError:
-            rows = []
+        rows = []
+        for found in re.finditer(r"\{[^{}]*\}", out.text):  # every complete object, so a reply cut off at the limit still counts
+            try:
+                rows.append(json.loads(found.group()))
+            except ValueError:
+                continue
         known = {c["username"] for c in batch}
-        for row in rows if isinstance(rows, list) else []:
+        for row in rows:
             name = str(row.get("u", "")).lstrip("@") if isinstance(row, dict) else ""
             if name in known and row.get("kind") in KINDS:
                 sorted_out[name] = {"kind": row["kind"], "competitor": bool(row.get("competitor")) and row["kind"] == "shop",
@@ -230,10 +250,10 @@ def apply_filters(creators: list[dict], f: Filters, now: datetime | None = None)
 
 # ---------- the job ----------
 
-def start(aid: str, preset: str) -> dict:
+def start(aid: str, plan: list[dict]) -> dict:
     """Mark the search as running and hand it to a thread. The caller has already checked the profile and the token."""
-    state = analyses.update(aid, lambda s: s["creators"].update({**analyses.EMPTY_CREATORS, "status": "running", "preset": preset, "items": s["creators"]["items"]}))  # the old list stays until the new one replaces it
-    analyses.spawn(run, aid, preset)
+    state = analyses.update(aid, lambda s: s["creators"].update({**analyses.EMPTY_CREATORS, "status": "running", "plan": plan, "items": s["creators"]["items"]}))  # the old list stays until the new one replaces it
+    analyses.spawn(run, aid, plan)
     return state
 
 
@@ -275,14 +295,21 @@ def _sort_accounts(aid: str, profile: dict, creators: list[dict], earlier: list[
     return None if len(labels) == len(todo) else f"The model labelled {len(labels)} of {len(todo)} accounts; the rest are shown unlabelled."
 
 
-def run(aid: str, preset: str) -> None:
+def run(aid: str, plan: list[dict]) -> None:
     state = analyses.load(aid)
     if state is None or not state["profile"]:
         return
-    tags, run_input = plan(state["profile"], preset)
+    tags = [p["hashtag"] for p in plan]
     try:
         analyses.update(aid, lambda s: s["creators"].update(phase="searching"))
-        videos, usd, cached = apify_runner.run_actor(config.apify_token()[0], ACTOR, run_input)
+        found, usd, cached = [], 0.0, True
+        for run_input in runs(plan):
+            items, spent, from_cache = apify_runner.run_actor(config.apify_token()[0], ACTOR, run_input)
+            found += items
+            usd += spent
+            cached = cached and from_cache
+        usd = round(usd, 5)
+        videos = list({v.get("id") or id(v): v for v in found}.values())  # a video under two hashtags counts once
         creators = group_creators(videos)
         problem = _sort_accounts(aid, state["profile"], creators, state["creators"]["items"])
     except (UpstreamError, httpx.HTTPError) as exc:
@@ -295,7 +322,7 @@ def run(aid: str, preset: str) -> None:
         return
 
     def done(s):
-        s["creators"].update(status="done", phase=None, hashtags=tags, videos=len(videos), usd=usd, cached=cached, items=creators,
+        s["creators"].update(status="done", phase=None, plan=plan, hashtags=tags, videos=len(videos), usd=usd, cached=cached, items=creators,
                              searched_at=datetime.now(timezone.utc).isoformat(), error=None, classify_error=problem)
         s["cost"]["apify_usd"] = round(s["cost"]["apify_usd"] + usd, 5)
         s["cost"]["cached_runs"] += int(cached)

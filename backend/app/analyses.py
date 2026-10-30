@@ -31,7 +31,7 @@ MAX_CANDIDATES = 3
 STORED_PAGE_CHARS = 8000
 POSTS_TO_READ = 10
 # The TikTok creator search of one analysis (app/discovery.py fills it in).
-EMPTY_CREATORS = {"status": "idle", "phase": None, "preset": None, "hashtags": [], "videos": 0, "usd": 0.0, "cached": False,
+EMPTY_CREATORS = {"status": "idle", "phase": None, "plan": [], "hashtags": [], "videos": 0, "usd": 0.0, "cached": False,
                   "searched_at": None, "error": None, "classify_error": None, "items": []}
 
 
@@ -102,6 +102,8 @@ def _normalize(s: dict) -> dict:
                          ("requested_facebook", None), ("recommended", None), ("profile", None), ("website", None), ("error", None)):
         s.setdefault(key, default)
     s.setdefault("creators", dict(EMPTY_CREATORS, hashtags=[], items=[]))
+    for key, default in EMPTY_CREATORS.items():  # a search saved by an older version lacks newer fields
+        s["creators"].setdefault(key, type(default)() if isinstance(default, (list, dict)) else default)
     s.setdefault("internal", {}).setdefault("site_pages", [])
     if s["profile"]:
         try:  # a profile written by an older version is carried into the current structure

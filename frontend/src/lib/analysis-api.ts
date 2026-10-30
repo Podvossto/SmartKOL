@@ -70,7 +70,7 @@ export type Cost = {
 export type CreatorsState = {
   status: "idle" | "running" | "done" | "error";
   phase: "searching" | "sorting" | null;
-  preset: Preset | null;
+  plan: PlanItem[];
   hashtags: string[];
   videos: number;
   usd: number;
@@ -129,7 +129,8 @@ export type Estimate = {
   llm: { model: string; provider: string } | null;
 };
 
-export type Preset = "lean" | "full";
+/** One hashtag of a search and how many videos to read from it. */
+export type PlanItem = { hashtag: string; videos: number };
 
 export type Creator = {
   username: string;
@@ -166,7 +167,7 @@ export type CreatorList = {
 };
 
 export type CreatorEstimate = {
-  estimate: { preset: Preset; hashtags: string[]; videos: number; usd: number; cached: boolean };
+  estimate: { plan: PlanItem[]; hashtags: string[]; videos: number; runs: number; usd: number; list_usd: number; cached: boolean };
   account: Estimate["account"];
 };
 
@@ -186,8 +187,8 @@ export const analysisApi = {
   get: (id: string) => call<Analysis>("GET", `/${id}`),
   confirmFacebook: (id: string, facebook_url: string | null) =>
     call<Analysis>("POST", `/${id}/profile`, { facebook_url }),
-  creatorsEstimate: (id: string, preset: Preset) => call<CreatorEstimate>("POST", `/${id}/creators/estimate`, { preset }),
-  searchCreators: (id: string, preset: Preset) => call<Analysis>("POST", `/${id}/creators/search`, { preset }),
+  creatorsEstimate: (id: string, plan: PlanItem[]) => call<CreatorEstimate>("POST", `/${id}/creators/estimate`, { plan }),
+  searchCreators: (id: string, plan: PlanItem[]) => call<Analysis>("POST", `/${id}/creators/search`, { plan }),
   creators: (id: string, f: CreatorFilters) => call<CreatorList>("GET", `/${id}/creators?${new URLSearchParams(Object.entries({ ...f, thai_min: f.thai_min / 100 }).map(([k, v]) => [k, String(v)]))}`),
   creator: (id: string, username: string) => call<Creator>("GET", `/${id}/creators/${encodeURIComponent(username)}`),
   saveProfile: (id: string, profile: Profile) => call<Analysis>("PUT", `/${id}/profile`, profile),

@@ -16,8 +16,13 @@ class StartIn(BaseModel):
     find_facebook: bool = False  # website only: also look for its Facebook page and let the user confirm one
 
 
+class PlanItem(BaseModel):
+    hashtag: str
+    videos: int
+
+
 class SearchIn(BaseModel):
-    preset: str = "lean"
+    plan: list[PlanItem]  # which hashtags to search and how many videos to read from each
 
 
 class ConfirmIn(BaseModel):
@@ -170,10 +175,11 @@ def edit_profile(aid: str, body: brand.BrandProfile) -> dict:
     return analyses.public(analyses.update(aid, lambda s: s.update(profile=edited)))
 
 
-def _preset(name: str) -> str:
-    if name not in discovery.PRESETS:
-        raise _problem(f"Unknown budget '{name}'. Use one of: {', '.join(discovery.PRESETS)}.", "preset")
-    return name
+def _plan(body: SearchIn) -> list[dict]:
+    try:
+        return discovery.clean_plan([(item.hashtag, item.videos) for item in body.plan])
+    except discovery.PlanError as exc:
+        raise _problem(str(exc), "plan")
 
 
 def _ready_profile(state: dict) -> dict:
@@ -185,7 +191,8 @@ def _ready_profile(state: dict) -> dict:
 @router.post("/{aid}/creators/estimate")
 def creators_estimate(aid: str, body: SearchIn, http: httpx.Client = Depends(get_http)) -> dict:
     """What a creator search would cost, and how many Apify credits are left. Nothing paid runs here."""
-    cost = discovery.estimate(_ready_profile(_get(aid)), _preset(body.preset))
+    _ready_profile(_get(aid))
+    cost = discovery.estimate(_plan(body))
     token, _ = config.apify_token()
     account = None
     if token:
@@ -199,22 +206,21 @@ def creators_estimate(aid: str, body: SearchIn, http: httpx.Client = Depends(get
 @router.post("/{aid}/creators/search")
 def creators_search(aid: str, body: SearchIn, http: httpx.Client = Depends(get_http)) -> dict:
     state = _get(aid)
-    profile, preset = _ready_profile(state), _preset(body.preset)
+    _ready_profile(state)
+    plan = _plan(body)
     if state["creators"]["status"] == "running":
         raise _problem("A search is already running.", status=409)
     token, _ = config.apify_token()
     if not token:
         raise _problem("Apify token is not set. Add it in Settings first.")
-    cost = discovery.estimate(profile, preset)
-    if not cost["hashtags"]:
-        raise _problem("Add at least one hashtag to search.", "hashtags")
+    cost = discovery.estimate(plan)
     try:
         left = clients.apify_account(http, token)["remaining_usd"]
     except (clients.UpstreamError, httpx.HTTPError):
         left = None  # unknown: the run itself will fail clearly if the account is empty
     if left is not None and cost["usd"] > left:
         raise _problem(f"This search needs about ${cost['usd']:.2f} but only ${left:.2f} of Apify credit is left.")
-    return analyses.public(discovery.start(aid, preset))
+    return analyses.public(discovery.start(aid, plan))
 
 
 @router.get("/{aid}/creators")

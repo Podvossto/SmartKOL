@@ -137,6 +137,11 @@ class ClassifyTest(unittest.TestCase):
         (labels, _), _ = self.run_classify(self.accounts("amy"), return_value=Completion("sorry, no", "m", 1, 1, 1, None))
         self.assertEqual(labels, {})
 
+    def test_a_reply_cut_off_at_the_token_limit_still_yields_the_complete_rows(self):
+        reply = '```json\n[\n{"u": "amy", "kind": "creator", "competitor": false, "reason": "reviewer"},\n{"u": "bob", "kind": "shop", "competitor": true, "reason": "sells cakes"},\n{"u": "cat", "ki'
+        (labels, _), _ = self.run_classify(self.accounts("amy", "bob", "cat"), return_value=Completion(reply, "m", 1, 1, 8000, None))
+        self.assertEqual({k: v["kind"] for k, v in labels.items()}, {"amy": "creator", "bob": "shop"})
+
     def test_many_accounts_are_sent_in_batches_and_the_usage_is_summed(self):
         with mock.patch.object(discovery, "CLASSIFY_BATCH", 2):
             (labels, usage), complete = self.run_classify(self.accounts("a", "b", "c", "d", "e"), side_effect=labelled())
@@ -151,22 +156,45 @@ class ClassifyTest(unittest.TestCase):
 
 
 class PlanTest(unittest.TestCase):
-    PROFILE = {"tiktok": {"hashtags_th": ["#a", "b", "c"], "hashtags_en": ["d", "e", "f", "g"]}}
+    def test_the_choice_is_cleaned_and_a_hashtag_with_no_videos_is_not_searched(self):
+        plan = discovery.clean_plan([("#a", 25), (" b c ", 10), ("A", 5), ("d", 0), ("", 9), ("##e", 25)])
+        self.assertEqual(plan, [{"hashtag": "a", "videos": 25}, {"hashtag": "bc", "videos": 10}, {"hashtag": "e", "videos": 25}])
 
-    def test_a_preset_takes_the_first_hashtags_of_the_list(self):
-        tags, run_input = discovery.plan(self.PROFILE, "lean")
-        self.assertEqual(tags, ["a", "b", "c"])
-        self.assertEqual(run_input["resultsPerPage"], 25)
-        self.assertFalse(run_input["shouldDownloadVideos"])
-        self.assertEqual(discovery.plan(self.PROFILE, "full")[0], ["a", "b", "c", "d", "e", "f"])
+    def test_an_unusable_choice_says_what_is_wrong(self):
+        for items, text in (([], "at least one"), ([("a", 0)], "at least one"), ([("a", 101)], "100 videos per hashtag"),
+                            ([(f"t{i}", 100) for i in range(6)], "500 videos")):
+            with self.assertRaises(discovery.PlanError, msg=str(items)) as caught:
+                discovery.clean_plan(items)
+            self.assertIn(text, str(caught.exception))
+        self.assertEqual(sum(p["videos"] for p in discovery.clean_plan([(f"t{i}", 100) for i in range(5)])), 500)  # the limit itself is allowed
 
-    def test_estimate_prices_every_video_plus_the_start_fee_and_is_free_when_cached(self):
+    def test_a_hashtag_without_letters_is_refused_but_thai_and_underscores_are_fine(self):
+        with self.assertRaises(discovery.PlanError):
+            discovery.clean_plan([("????????", 25)])
+        plan = discovery.clean_plan([("รีวิวขนม", 10), ("cafe_hopping", 10), ("คากิโกริ", 10)])
+        self.assertEqual([p["hashtag"] for p in plan], ["รีวิวขนม", "cafe_hopping", "คากิโกริ"])
+
+    def test_hashtags_with_the_same_count_share_one_run(self):
+        plan = discovery.clean_plan([("a", 25), ("b", 10), ("c", 25)])
+        runs = discovery.runs(plan)
+        self.assertEqual([(r["hashtags"], r["resultsPerPage"]) for r in runs], [(["a", "c"], 25), (["b"], 10)])
+        self.assertFalse(runs[0]["shouldDownloadVideos"])
+
+    def test_estimate_prices_every_video_plus_one_start_fee_per_run(self):
         with mock.patch.object(apify_runner, "is_cached", return_value=False):
-            lean, full = discovery.estimate(self.PROFILE, "lean"), discovery.estimate(self.PROFILE, "full")
-        self.assertEqual((lean["videos"], lean["usd"]), (75, round(75 * 0.0037 + 0.001, 4)))
-        self.assertEqual((full["videos"], full["usd"]), (240, round(240 * 0.0037 + 0.001, 4)))
+            one = discovery.estimate(discovery.clean_plan([("a", 25), ("b", 25), ("c", 25)]))
+            two = discovery.estimate(discovery.clean_plan([("a", 25), ("b", 10)]))
+        self.assertEqual((one["videos"], one["runs"], one["usd"]), (75, 1, round(75 * 0.0037 + 0.001, 4)))
+        self.assertEqual((two["videos"], two["runs"], two["usd"]), (35, 2, round(35 * 0.0037 + 2 * 0.001, 4)))
+
+    def test_a_run_already_in_the_cache_costs_nothing(self):
+        plan = discovery.clean_plan([("a", 25), ("b", 10)])
+        with mock.patch.object(apify_runner, "is_cached", side_effect=lambda actor, run_input: run_input["resultsPerPage"] == 25):
+            half = discovery.estimate(plan)
+        self.assertEqual((half["cached"], half["usd"]), (False, round(10 * 0.0037 + 0.001, 4)))
         with mock.patch.object(apify_runner, "is_cached", return_value=True):
-            self.assertEqual(discovery.estimate(self.PROFILE, "lean")["usd"], 0.0)
+            free = discovery.estimate(plan)
+        self.assertEqual((free["cached"], free["usd"], free["list_usd"]), (True, 0.0, round(35 * 0.0037 + 2 * 0.001, 4)))  # and what it would cost otherwise
 
 
 class SearchApiTest(ApiTestCase):
@@ -184,8 +212,10 @@ class SearchApiTest(ApiTestCase):
         self.addCleanup(self.account.stop)
         self.m["spawn"].side_effect = lambda fn, *a: fn(*a)
 
-    def search(self, preset="lean"):
-        return self.client.post(f"/api/analyses/{self.aid}/creators/search", json={"preset": preset})
+    PLAN = [{"hashtag": "ของหวาน", "videos": 25}, {"hashtag": "#คาเฟ่กรุงเทพ", "videos": 25}, {"hashtag": "ขนมหวาน", "videos": 25}]
+
+    def search(self, plan=None):
+        return self.client.post(f"/api/analyses/{self.aid}/creators/search", json={"plan": plan or self.PLAN})
 
     def test_a_search_stores_creators_adds_the_cost_and_keeps_the_polled_state_light(self):
         before = self.get(self.aid)["cost"]["apify_usd"]
@@ -197,7 +227,15 @@ class SearchApiTest(ApiTestCase):
         called = self.run.call_args.args
         self.assertEqual(called[1], discovery.ACTOR)
         self.assertEqual(called[2]["hashtags"], ["ของหวาน", "คาเฟ่กรุงเทพ", "ขนมหวาน"])
+        self.assertEqual(state["creators"]["plan"], [{"hashtag": h, "videos": 25} for h in ("ของหวาน", "คาเฟ่กรุงเทพ", "ขนมหวาน")])
 
+    def test_hashtags_with_different_counts_run_separately_and_the_costs_add_up(self):
+        self.run.side_effect = [([video("amy"), video("bob")], 0.1, False), ([video("amy", days_ago=5)], 0.05, True)]
+        self.search([{"hashtag": "a", "videos": 25}, {"hashtag": "b", "videos": 10}])
+        self.assertEqual([c.args[2]["resultsPerPage"] for c in self.run.call_args_list], [25, 10])
+        creators = self.get(self.aid)["creators"]
+        self.assertEqual((creators["videos"], creators["found"], creators["usd"], creators["cached"]), (3, 2, 0.15, False))
+        self.assertEqual(creators["hashtags"], ["a", "b"])
     def test_the_filtered_list_comes_from_the_stored_creators_for_free(self):
         self.search()
         self.run.reset_mock()
@@ -208,8 +246,8 @@ class SearchApiTest(ApiTestCase):
         self.run.assert_not_called()
 
     def test_estimate_returns_the_price_and_the_credits_left(self):
-        res = self.client.post(f"/api/analyses/{self.aid}/creators/estimate", json={"preset": "full"}).json()
-        self.assertEqual((res["estimate"]["videos"], res["account"]["remaining_usd"]), (160, 4.0))  # the test profile has 4 hashtags
+        res = self.client.post(f"/api/analyses/{self.aid}/creators/estimate", json={"plan": [{"hashtag": "x", "videos": 40}, {"hashtag": "y", "videos": 40}]}).json()
+        self.assertEqual((res["estimate"]["videos"], res["estimate"]["usd"], res["account"]["remaining_usd"]), (80, round(80 * 0.0037 + 0.001, 4), 4.0))
         self.run.assert_not_called()
 
     def test_refuses_what_it_cannot_afford_or_cannot_search(self):
@@ -217,8 +255,10 @@ class SearchApiTest(ApiTestCase):
             res = self.search()
         self.assertEqual(res.status_code, 400)
         self.assertIn("$0.05", res.json()["detail"]["message"])
-        self.assertEqual(self.search("huge").json()["detail"]["field"], "preset")
-        self.assertEqual(self.client.post("/api/analyses/nope/creators/search", json={}).status_code, 404)
+        for bad in ([], [{"hashtag": "a", "videos": 0}], [{"hashtag": "a", "videos": 101}], [{"hashtag": f"t{i}", "videos": 100} for i in range(6)]):
+            res = self.search(bad) if bad else self.client.post(f"/api/analyses/{self.aid}/creators/search", json={"plan": []})
+            self.assertEqual((res.status_code, res.json()["detail"]["field"]), (400, "plan"), bad)
+        self.assertEqual(self.client.post("/api/analyses/nope/creators/search", json={"plan": self.PLAN}).status_code, 404)
         self.run.assert_not_called()
 
     def test_a_failed_search_says_why_and_can_be_repeated(self):

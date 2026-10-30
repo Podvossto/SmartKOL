@@ -120,7 +120,7 @@ export function CreatorsStep() {
               {error}
             </p>
           )}
-          {listing && sorted.length === 0 && <p className="rounded-3xl bg-white/60 px-6 py-12 text-center text-sm text-muted-foreground ring-1 ring-black/[0.05]">No one matches these filters. Loosen one above, or search again with the Full budget.</p>}
+          {listing && sorted.length === 0 && <p className="rounded-3xl bg-white/60 px-6 py-12 text-center text-sm text-muted-foreground ring-1 ring-black/[0.05]">No one matches these filters. Loosen one above, or search again with more videos.</p>}
           {sorted.length > 0 && (view === "table" ? <CreatorTable analysisId={analysis.id} creators={sorted.slice(0, shown)} sort={sort} onSort={sortBy} /> : <CreatorCards analysisId={analysis.id} creators={sorted.slice(0, shown)} />)}
           {sorted.length > shown && (
             <button type="button" onClick={() => setShown((n) => n + PAGE)} className="w-fit text-sm text-primary underline-offset-4 hover:underline">
