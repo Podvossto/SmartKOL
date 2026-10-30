@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid, Rows3 } from "lucide-react";
+import { Download, LayoutGrid, Rows3 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -124,6 +124,11 @@ export function CreatorsStep() {
                   ))}
                 </select>
               </label>
+              {sorted.length > 0 && (
+                <a href={analysisApi.exportUrl(analysis.id, filters)} download className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm ring-1 ring-black/10 transition-colors hover:text-primary" title="The list as you see it, with the scores, as a CSV file for Excel or Sheets">
+                  <Download className="size-4" strokeWidth={1.75} /> Export CSV
+                </a>
+              )}
               <div role="group" aria-label="View" className="flex gap-1 rounded-full bg-muted p-1">
                 {VIEWS.map(({ id, label, icon: Icon }) => (
                   <button

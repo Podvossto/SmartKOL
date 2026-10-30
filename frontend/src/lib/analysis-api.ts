@@ -225,6 +225,8 @@ export const creatorPictureUrl = (id: string, username: string, kind: string | n
 export const logoUrl = (id: string) => `/api/analyses/${id}/logo`;
 export const mediaUrl = (id: string, key: string) => `/api/analyses/${id}/media/${key}`;
 
+const filterQuery = (f: CreatorFilters) => new URLSearchParams(Object.entries({ ...f, thai_min: f.thai_min / 100 }).map(([k, v]) => [k, String(v)])).toString();
+
 export const analysisApi = {
   estimate: (website_url: string, facebook_url: string, find_facebook = false) =>
     call<Estimate>("POST", "/estimate", { website_url: website_url || null, facebook_url: facebook_url || null, find_facebook }),
@@ -238,7 +240,9 @@ export const analysisApi = {
     call<Analysis>("POST", `/${id}/profile`, { facebook_url }),
   creatorsEstimate: (id: string, plan: PlanItem[]) => call<CreatorEstimate>("POST", `/${id}/creators/estimate`, { plan }),
   searchCreators: (id: string, plan: PlanItem[]) => call<Analysis>("POST", `/${id}/creators/search`, { plan }),
-  creators: (id: string, f: CreatorFilters) => call<CreatorList>("GET", `/${id}/creators?${new URLSearchParams(Object.entries({ ...f, thai_min: f.thai_min / 100 }).map(([k, v]) => [k, String(v)]))}`),
+  creators: (id: string, f: CreatorFilters) => call<CreatorList>("GET", `/${id}/creators?${filterQuery(f)}`),
+  /** The list as shown (same filters and weights) as a CSV file; the browser downloads it from this link. */
+  exportUrl: (id: string, f: CreatorFilters) => `/api/analyses/${id}/creators/export.csv?${filterQuery(f)}`,
   creator: (id: string, username: string) => call<Creator>("GET", `/${id}/creators/${encodeURIComponent(username)}`),
   enrichEstimate: (id: string, usernames: string[], videos: number) => call<EnrichEstimate>("POST", `/${id}/creators/enrich/estimate`, { usernames, videos }),
   enrich: (id: string, usernames: string[], videos: number) => call<Analysis>("POST", `/${id}/creators/enrich`, { usernames, videos }),

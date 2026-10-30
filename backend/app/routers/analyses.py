@@ -3,7 +3,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
-from .. import analyses, brand, clients, config, discovery, enrichment, logos, media, preflight, scoring
+from .. import analyses, brand, clients, config, discovery, enrichment, exporting, logos, media, preflight, scoring
 from ..social import normalize_facebook, validate_public_url
 from .settings import get_http
 
@@ -240,15 +240,30 @@ def creators_search(aid: str, body: SearchIn, http: httpx.Client = Depends(get_h
     return analyses.public(discovery.start(aid, plan))
 
 
+def _listing(aid: str, thai_min: float, skip_private: bool, max_age_days: int, min_followers: int, max_followers: int, skip_shops: bool) -> tuple[dict, list[dict], dict]:
+    state = _get(aid)["creators"]
+    filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None, skip_shops)
+    kept, dropped = discovery.apply_filters(state["items"], filters)
+    return state, scoring.attach(kept, state["weights"]), dropped
+
+
 @router.get("/{aid}/creators")
 def creators(aid: str, thai_min: float = 0.6, skip_private: bool = True, max_age_days: int = 30, min_followers: int = 10_000,
              max_followers: int = 0, skip_shops: bool = True) -> dict:
     """The found creators after the hard filters. A numeric filter set to 0 is off. Costs nothing."""
-    state = _get(aid)["creators"]
-    found = state["items"]
-    filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None, skip_shops)
-    kept, dropped = discovery.apply_filters(found, filters)
-    return {"total": len(found), "kept": [discovery.public_creator(c) for c in scoring.attach(kept, state["weights"])], "dropped": dropped, "weights": state["weights"]}
+    state, kept, dropped = _listing(aid, thai_min, skip_private, max_age_days, min_followers, max_followers, skip_shops)
+    return {"total": len(state["items"]), "kept": [discovery.public_creator(c) for c in kept], "dropped": dropped, "weights": state["weights"]}
+
+
+@router.get("/{aid}/creators/export.csv")
+def creators_csv(aid: str, thai_min: float = 0.6, skip_private: bool = True, max_age_days: int = 30, min_followers: int = 10_000,
+                 max_followers: int = 0, skip_shops: bool = True) -> Response:
+    """The list as it is shown (same filters, same weights), ranked, as a CSV file. Costs nothing."""
+    _, kept, _ = _listing(aid, thai_min, skip_private, max_age_days, min_followers, max_followers, skip_shops)
+    if not kept:
+        raise _problem("There are no creators to export with these filters.", status=409)
+    return Response(exporting.creators_csv(kept), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="smartkol-creators.csv"'})
 
 
 def _enrich_args(aid: str, body: EnrichIn) -> tuple[dict, list[str]]:
