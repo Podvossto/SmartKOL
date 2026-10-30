@@ -108,6 +108,11 @@ def save_llm(body: LlmIn) -> dict:
     saved = secrets_store.get("llm") or {}
     # Only reuse saved values for the same provider — never send one provider's key to another.
     existing = saved if saved.get("provider") == body.provider else {}
+    if not existing:
+        # a key that came from credential/.env counts too, so the model can be changed without pasting it again
+        active = config.llm_config()
+        if active and active.provider == body.provider:
+            existing = {"api_key": active.api_key, "model": active.model, "protocol": active.protocol, "base_url": active.base_url}
     if body.provider == "custom":
         protocol = body.protocol or existing.get("protocol")
         base_url = (body.base_url or existing.get("base_url") or "").strip().rstrip("/")
@@ -160,6 +165,18 @@ def test_llm(http: httpx.Client = Depends(get_http)) -> dict:
         raise _bad(str(exc) if isinstance(exc, clients.UpstreamError) else "Could not reach the LLM provider")
 
 
+@router.post("/llm/balance")
+def llm_balance(http: httpx.Client = Depends(get_http)) -> dict:
+    """Credit left with the model provider, when it says (OpenRouter). Empty values when it does not."""
+    cfg = config.llm_config()
+    if not cfg:
+        raise _bad("No LLM configured")
+    try:
+        return clients.llm_balance(http, cfg) or {"usage_usd": None, "limit_usd": None, "remaining_usd": None}
+    except (clients.UpstreamError, httpx.HTTPError) as exc:
+        raise _bad(str(exc) if isinstance(exc, clients.UpstreamError) else "Could not reach the LLM provider")
+
+
 @router.post("/openrouter/exchange")
 def openrouter_exchange(body: ExchangeIn, http: httpx.Client = Depends(get_http)) -> dict:
     try:
@@ -167,6 +184,9 @@ def openrouter_exchange(body: ExchangeIn, http: httpx.Client = Depends(get_http)
     except (clients.UpstreamError, httpx.HTTPError) as exc:
         raise _bad(str(exc) if isinstance(exc, clients.UpstreamError) else "Could not reach OpenRouter")
     protocol, base_url, model = config.PRESETS["openrouter"]
+    saved = secrets_store.get("llm") or {}
+    if saved.get("provider") == "openrouter" and saved.get("model"):
+        model = saved["model"]  # signing in again must not undo the model that was chosen
     secrets_store.put(
         "llm",
         {"provider": "openrouter", "protocol": protocol, "base_url": base_url, "api_key": key, "model": model, "auth": "oauth"},

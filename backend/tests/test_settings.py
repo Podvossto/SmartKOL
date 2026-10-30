@@ -132,6 +132,20 @@ class SettingsApiTest(unittest.TestCase):
         self.assertNotIn(LLM_KEY, res.text)
         self.assertEqual(self.client.post("/api/settings/llm/test").json()["reply"], "ok")
 
+    def test_model_can_change_when_the_key_comes_from_the_env_file(self):
+        env = {"LLM_API_KEY": LLM_KEY, "LLM_PROTOCOL": "openai", "LLM_BASE_URL": "https://openrouter.ai/api/v1", "LLM_MODEL": "a/b"}
+        with mock.patch.dict(os.environ, env):
+            res = self.client.put("/api/settings/llm", json={"provider": "openrouter", "model": "google/gemini-2.5-flash-lite"})
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(self.client.post("/api/settings/llm/test").json()["model"], "google/gemini-2.5-flash-lite")
+            other = self.client.put("/api/settings/llm", json={"provider": "anthropic"})
+            self.assertEqual(other.status_code, 400)  # the env key is never lent to another provider
+
+    def test_signing_in_again_keeps_the_chosen_model(self):
+        self.client.put("/api/settings/llm", json={"provider": "openrouter", "api_key": LLM_KEY, "model": "google/gemini-2.5-flash-lite"})
+        self.client.post("/api/settings/openrouter/exchange", json={"code": "good-code", "code_verifier": "verifier"})
+        self.assertEqual(self.client.get("/api/settings").json()["llm"]["model"], "google/gemini-2.5-flash-lite")
+
     def test_oauth_exchange_with_bad_code_fails_cleanly(self):
         res = self.client.post("/api/settings/openrouter/exchange", json={"code": "nope", "code_verifier": "verifier"})
         self.assertEqual(res.status_code, 400)

@@ -45,6 +45,17 @@ def apify_account(http: httpx.Client, token: str) -> dict:
     }
 
 
+def llm_balance(http: httpx.Client, cfg: LlmConfig) -> dict | None:
+    """What is left on the key's credit limit. Only OpenRouter reports this; other providers give None."""
+    if cfg.provider != "openrouter":
+        return None
+    resp = http.get(f"{cfg.base_url.rstrip('/')}/key", headers={"Authorization": f"Bearer {cfg.api_key}"})
+    if resp.is_error:
+        raise UpstreamError(f"OpenRouter error {resp.status_code}: {_short(resp)}")
+    data = resp.json().get("data", {})
+    return {"usage_usd": data.get("usage"), "limit_usd": data.get("limit"), "remaining_usd": data.get("limit_remaining")}
+
+
 def llm_ping(http: httpx.Client, cfg: LlmConfig) -> dict:
     prompt = "Reply with the single word: ok"
     base = cfg.base_url.rstrip("/")
