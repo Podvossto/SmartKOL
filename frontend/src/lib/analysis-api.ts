@@ -67,6 +67,41 @@ export type Cost = {
   cached_runs: number;
 };
 
+export type Axis = "relevance" | "engagement" | "audience" | "activity";
+export type Weights = Record<Axis, number>;
+
+/** Numbers computed from a creator's own latest videos (not lifetime totals). */
+export type Metrics = {
+  videos: number;
+  median_views: number;
+  median_er: number | null;
+  posts_per_week: number | null;
+  last_post: string | null;
+  days_since_last_post: number | null;
+  ad_share: number;
+  shop_share: number;
+  read_at: string;
+};
+
+/** Four axes 0-100. Relevance and audience come from the AI (audience is an estimate); engagement and activity are computed from the numbers. */
+export type Score = Record<Axis, number> & {
+  category: number;
+  style: number;
+  product: number;
+  safety: number;
+  reason: string;
+  audience_reason: string;
+  confidence: "low" | "medium" | "high";
+  engagement_note: string;
+  activity_note: string;
+  flags: string[];
+  model: string | null;
+  scored_at: string;
+};
+
+/** What a background job reports. `status` is missing until the job has run once. */
+export type JobState = { status?: "running" | "done" | "error"; error?: string | null; usd?: number; model?: string | null; scored?: number; failed?: number; missing?: string[]; cached?: boolean };
+
 export type CreatorsState = {
   status: "idle" | "running" | "done" | "error";
   phase: "searching" | "sorting" | null;
@@ -79,6 +114,9 @@ export type CreatorsState = {
   error: string | null;
   classify_error: string | null;
   found: number;
+  enrich: JobState;
+  scoring: JobState;
+  weights: Weights;
 };
 
 export type Analysis = {
@@ -155,6 +193,11 @@ export type Creator = {
   kind_reason: string;
   has_avatar: boolean;
   samples: { url: string | null; text: string; views: number; has_cover: boolean }[];
+  metrics?: Metrics;
+  score?: Score;
+  /** Weighted mean of the four axes under the current weights; null until the creator is scored. */
+  total?: number | null;
+  rank?: number;
 };
 
 /** 0 switches a numeric filter off. `thai_min` is a percentage. */
@@ -164,6 +207,12 @@ export type CreatorList = {
   total: number;
   kept: Creator[];
   dropped: Record<"thai" | "private" | "recent" | "min_followers" | "max_followers" | "shops", number>;
+  weights: Weights;
+};
+
+export type EnrichEstimate = {
+  estimate: { creators: number; videos_each: number; videos: number; usd: number; list_usd: number; cached: boolean };
+  account: Estimate["account"];
 };
 
 export type CreatorEstimate = {
@@ -191,5 +240,9 @@ export const analysisApi = {
   searchCreators: (id: string, plan: PlanItem[]) => call<Analysis>("POST", `/${id}/creators/search`, { plan }),
   creators: (id: string, f: CreatorFilters) => call<CreatorList>("GET", `/${id}/creators?${new URLSearchParams(Object.entries({ ...f, thai_min: f.thai_min / 100 }).map(([k, v]) => [k, String(v)]))}`),
   creator: (id: string, username: string) => call<Creator>("GET", `/${id}/creators/${encodeURIComponent(username)}`),
+  enrichEstimate: (id: string, usernames: string[], videos: number) => call<EnrichEstimate>("POST", `/${id}/creators/enrich/estimate`, { usernames, videos }),
+  enrich: (id: string, usernames: string[], videos: number) => call<Analysis>("POST", `/${id}/creators/enrich`, { usernames, videos }),
+  score: (id: string, usernames: string[], redo = false) => call<Analysis>("POST", `/${id}/creators/score`, { usernames, redo }),
+  setWeights: (id: string, w: Weights) => call<{ weights: Weights }>("PUT", `/${id}/creators/weights`, w),
   saveProfile: (id: string, profile: Profile) => call<Analysis>("PUT", `/${id}/profile`, profile),
 };

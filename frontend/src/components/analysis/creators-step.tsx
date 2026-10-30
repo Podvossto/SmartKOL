@@ -2,7 +2,7 @@
 
 import { LayoutGrid, Rows3 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { type CreatorFilters, type CreatorList, analysisApi } from "@/lib/analysis-api";
@@ -15,6 +15,7 @@ import { CreatorFilterPanel, DEFAULT_FILTERS } from "./creator-filters";
 import { SORT_LABELS, type Sort, type SortKey, sortCreators } from "./creator-sort";
 import { CreatorTable } from "./creator-table";
 import { EmptyState, Rise } from "./panel";
+import { RankPanel } from "./rank-panel";
 
 const PAGE = 20;
 type View = "table" | "cards";
@@ -30,7 +31,7 @@ export function CreatorsStep() {
   const [listing, setListing] = useState<CreatorList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("table");
-  const [sort, setSort] = useState<Sort>({ key: "followers", dir: "desc" });
+  const [picked, setSort] = useState<Sort | null>(null); // null: the default order, which is the ranking once there is one
   const [shown, setShown] = useState(PAGE);
   const found = analysis.creators.found;
   const searchedAt = analysis.creators.searched_at;
@@ -47,7 +48,14 @@ export function CreatorsStep() {
     };
   }, [analysis.id, filters, found, searchedAt]);
 
-  const sorted = useMemo(() => (listing ? sortCreators(listing.kept, sort) : []), [listing, sort]);
+  // The ranking is the point of scoring: best-first as soon as scores exist, until the user sorts otherwise.
+  const scored = listing?.kept.some((c) => c.score) ?? false;
+  const sort: Sort = picked ?? (scored ? { key: "total", dir: "desc" } : { key: "followers", dir: "desc" });
+  const sorted = useMemo(() => (listing ? sortCreators(listing.kept, sort) : []), [listing, sort.key, sort.dir]); // eslint-disable-line react-hooks/exhaustive-deps
+  const showRanking = useCallback(() => {
+    setSort(null);
+    analysisApi.creators(analysis.id, filters).then(setListing).catch((err) => setError(errorMessage(err)));
+  }, [analysis.id, filters]);
 
   if (found === 0) {
     return (
@@ -63,7 +71,7 @@ export function CreatorsStep() {
     setFilters((f) => ({ ...f, ...c }));
     setShown(PAGE);
   };
-  const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
+  const sortBy = (key: SortKey) => setSort(sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" });
 
   return (
     <div className="flex flex-col gap-6">
@@ -78,6 +86,9 @@ export function CreatorsStep() {
           {analysis.creators.classify_error} Shops are only hidden where the AI labelled them.
         </p>
       )}
+      <Rise index={1}>
+        <RankPanel creators={sorted} onScored={showRanking} />
+      </Rise>
       <Rise index={1}>
         <CreatorFilterPanel filters={filters} onChange={change} dropped={listing?.dropped} />
       </Rise>
@@ -122,6 +133,11 @@ export function CreatorsStep() {
           )}
           {listing && sorted.length === 0 && <p className="rounded-3xl bg-white/60 px-6 py-12 text-center text-sm text-muted-foreground ring-1 ring-black/[0.05]">No one matches these filters. Loosen one above, or search again with more videos.</p>}
           {sorted.length > 0 && (view === "table" ? <CreatorTable analysisId={analysis.id} creators={sorted.slice(0, shown)} sort={sort} onSort={sortBy} /> : <CreatorCards analysisId={analysis.id} creators={sorted.slice(0, shown)} />)}
+          {scored && sorted.length > 0 && view === "table" && (
+            <p className="text-xs text-muted-foreground">
+              Scores are 0-100. * Audience fit is the AI&apos;s estimate from the creator&apos;s content: TikTok does not show who watches. Unscored creators have not been read yet.
+            </p>
+          )}
           {sorted.length > shown && (
             <button type="button" onClick={() => setShown((n) => n + PAGE)} className="w-fit text-sm text-primary underline-offset-4 hover:underline">
               Show {Math.min(PAGE, sorted.length - shown)} more

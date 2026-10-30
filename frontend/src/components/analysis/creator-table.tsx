@@ -9,17 +9,27 @@ import { cn } from "@/lib/utils";
 
 import { CreatorAvatar } from "./creator-avatar";
 import { KindBadge } from "./kind-badge";
-import type { Sort, SortKey } from "./creator-sort";
+import { type Sort, type SortKey, viewsOf } from "./creator-sort";
+import { ScoreCell } from "./score-cell";
 
 export const creatorHref = (analysisId: string, c: Creator) => `/analysis/${analysisId}/creators/${encodeURIComponent(c.username)}`;
 
 type Column = { key: SortKey; label: string; className?: string };
-const COLUMNS: Column[] = [
+const BASE: Column[] = [
   { key: "followers", label: "Followers" },
   { key: "median_views", label: "Typical views" },
   { key: "thai_share", label: "Thai captions", className: "hidden sm:table-cell" },
-  { key: "last_post", label: "Seen", className: "hidden md:table-cell" },
+  { key: "last_post", label: "Last post", className: "hidden md:table-cell" },
 ];
+// Shown once creators have been read and scored; the four axes only from a wide screen, the total always.
+const SCORED: Column[] = [{ key: "total", label: "Score" }];
+const AXES: Column[] = [
+  { key: "relevance", label: "Fit", className: "hidden lg:table-cell" },
+  { key: "engagement", label: "Engagement", className: "hidden xl:table-cell" },
+  { key: "audience", label: "Audience*", className: "hidden xl:table-cell" },
+  { key: "activity", label: "Activity", className: "hidden xl:table-cell" },
+];
+const RATE: Column = { key: "er", label: "Eng. rate", className: "hidden md:table-cell" };
 
 function Head({ column, sort, onSort }: { column: Column; sort: Sort; onSort: (key: SortKey) => void }) {
   const active = sort.key === column.key;
@@ -36,18 +46,23 @@ function Head({ column, sort, onSort }: { column: Column; sort: Sort; onSort: (k
 /** One row per creator, columns to compare and sort by. A row opens that creator's page. */
 export function CreatorTable({ analysisId, creators, sort, onSort }: { analysisId: string; creators: Creator[]; sort: Sort; onSort: (key: SortKey) => void }) {
   const router = useRouter();
+  const scored = creators.some((c) => c.score);
+  const read = creators.some((c) => c.metrics);
+  const columns = [...(scored ? SCORED : []), ...BASE.filter((c) => !(scored && c.key === "thai_share")), ...(read ? [RATE] : []), ...(scored ? AXES : [])];
   return (
     <div className="relative overflow-x-auto rounded-3xl bg-white/80 ring-1 ring-black/[0.06]">
       <table className="w-full text-sm">
         <thead className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
             <Head column={{ key: "name", label: "Creator" }} sort={sort} onSort={onSort} />
-            {COLUMNS.map((c) => (
+            {columns.map((c) => (
               <Head key={c.key} column={c} sort={sort} onSort={onSort} />
             ))}
-            <th scope="col" className="hidden px-4 py-3 text-left font-medium lg:table-cell">
-              Bio
-            </th>
+            {!scored && (
+              <th scope="col" className="hidden px-4 py-3 text-left font-medium lg:table-cell">
+                Bio
+              </th>
+            )}
             <th scope="col" className="w-10 px-4 py-3">
               <span className="sr-only">Open on TikTok</span>
             </th>
@@ -76,13 +91,40 @@ export function CreatorTable({ analysisId, creators, sort, onSort }: { analysisI
                   </span>
                 </a>
               </td>
+              {scored && (
+                <td className="px-4 py-3">
+                  <span className="flex items-center gap-2">
+                    {c.rank != null && <span className="w-6 text-xs text-muted-foreground tabular-nums">#{c.rank}</span>}
+                    <ScoreCell value={c.total} strong />
+                  </span>
+                </td>
+              )}
               <td className="px-4 py-3 tabular-nums">{formatCount(c.followers)}</td>
-              <td className="px-4 py-3 tabular-nums">{formatCount(c.median_views)}</td>
-              <td className="hidden px-4 py-3 tabular-nums sm:table-cell">{Math.round(c.thai_share * 100)}%</td>
-              <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{timeAgo(c.last_post)}</td>
-              <td className="hidden max-w-xs px-4 py-3 text-muted-foreground lg:table-cell">
-                <span className="line-clamp-2 text-xs">{c.bio}</span>
-              </td>
+              <td className="px-4 py-3 tabular-nums">{formatCount(viewsOf(c))}</td>
+              {!scored && <td className="hidden px-4 py-3 tabular-nums sm:table-cell">{Math.round(c.thai_share * 100)}%</td>}
+              <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{timeAgo(c.metrics?.last_post ?? c.last_post)}</td>
+              {read && <td className="hidden px-4 py-3 tabular-nums md:table-cell">{c.metrics?.median_er != null ? `${(c.metrics.median_er * 100).toFixed(1)}%` : "—"}</td>}
+              {scored && (
+                <>
+                  <td className="hidden px-4 py-3 lg:table-cell">
+                    <ScoreCell value={c.score?.relevance} />
+                  </td>
+                  <td className="hidden px-4 py-3 xl:table-cell">
+                    <ScoreCell value={c.score?.engagement} />
+                  </td>
+                  <td className="hidden px-4 py-3 xl:table-cell">
+                    <ScoreCell value={c.score?.audience} estimated />
+                  </td>
+                  <td className="hidden px-4 py-3 xl:table-cell">
+                    <ScoreCell value={c.score?.activity} />
+                  </td>
+                </>
+              )}
+              {!scored && (
+                <td className="hidden max-w-xs px-4 py-3 text-muted-foreground lg:table-cell">
+                  <span className="line-clamp-2 text-xs">{c.bio}</span>
+                </td>
+              )}
               <td className="px-4 py-3">
                 <a href={c.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`Open @${c.username} on TikTok`} className="text-muted-foreground transition-colors hover:text-primary">
                   <ExternalLink className="size-4" />
