@@ -1,6 +1,8 @@
 services:
   backend:
     build: ./backend
+    init: true        # reap Chromium child processes
+    shm_size: "1gb"   # Chromium crashes with the 64 MB default /dev/shm
     env_file:
       - path: credential/.env
         required: false

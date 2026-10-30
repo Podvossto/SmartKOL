@@ -1,10 +1,12 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Headless Chromium (plus its system libraries) renders websites and checks Facebook links.
+RUN pip install --no-cache-dir -r requirements.txt && playwright install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY app ./app
 
