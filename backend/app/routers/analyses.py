@@ -3,7 +3,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
-from .. import analyses, brand, clients, config, discovery, enrichment, logos, media, preflight
+from .. import analyses, brand, clients, config, discovery, enrichment, logos, media, preflight, scoring
 from ..social import normalize_facebook, validate_public_url
 from .settings import get_http
 
@@ -28,6 +28,18 @@ class SearchIn(BaseModel):
 class EnrichIn(BaseModel):
     usernames: list[str]
     videos: int = enrichment.DEFAULT_VIDEOS
+
+
+class ScoreIn(BaseModel):
+    usernames: list[str] | None = None  # None = every creator whose videos have been read
+    redo: bool = False  # ask the model again even for creators it has already judged
+
+
+class WeightsIn(BaseModel):
+    relevance: float
+    engagement: float
+    audience: float
+    activity: float
 
 
 class ConfirmIn(BaseModel):
@@ -232,10 +244,11 @@ def creators_search(aid: str, body: SearchIn, http: httpx.Client = Depends(get_h
 def creators(aid: str, thai_min: float = 0.6, skip_private: bool = True, max_age_days: int = 30, min_followers: int = 10_000,
              max_followers: int = 0, skip_shops: bool = True) -> dict:
     """The found creators after the hard filters. A numeric filter set to 0 is off. Costs nothing."""
-    found = _get(aid)["creators"]["items"]
+    state = _get(aid)["creators"]
+    found = state["items"]
     filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None, skip_shops)
     kept, dropped = discovery.apply_filters(found, filters)
-    return {"total": len(found), "kept": [discovery.public_creator(c) for c in kept], "dropped": dropped}
+    return {"total": len(found), "kept": [discovery.public_creator(c) for c in scoring.attach(kept, state["weights"])], "dropped": dropped, "weights": state["weights"]}
 
 
 def _enrich_args(aid: str, body: EnrichIn) -> tuple[dict, list[str]]:
@@ -278,6 +291,36 @@ def enrich(aid: str, body: EnrichIn, http: httpx.Client = Depends(get_http)) -> 
     return analyses.public(enrichment.start(aid, names, body.videos))
 
 
+@router.post("/{aid}/creators/score")
+def score(aid: str, body: ScoreIn) -> dict:
+    """Score (and so rank) the creators whose videos have been read. The model is asked only about creators it has
+    not judged yet, unless `redo` is set; the numeric axes are always recomputed."""
+    state = _get(aid)
+    if not state["profile"]:
+        raise _problem("Finish the brand profile before scoring creators.", status=409)
+    if state["creators"]["status"] == "running" or state["creators"]["enrich"].get("status") == "running" or state["creators"]["scoring"].get("status") == "running":
+        raise _problem("A search, a read or a scoring is already running.", status=409)
+    try:
+        names = scoring.clean(body.usernames, state["creators"]["items"])
+    except scoring.ScoreError as exc:
+        raise _problem(str(exc), "usernames")
+    if not config.llm_config():
+        raise _problem("No language model is set. Add one in Settings first.")
+    return analyses.public(scoring.start(aid, names, body.redo))
+
+
+@router.put("/{aid}/creators/weights")
+def set_weights(aid: str, body: WeightsIn) -> dict:
+    """How much each axis counts in the total. Costs nothing: totals are computed when the list is shown."""
+    _get(aid)
+    try:
+        weights = scoring.clean_weights(body.model_dump())
+    except scoring.ScoreError as exc:
+        raise _problem(str(exc), "weights")
+    analyses.update(aid, lambda s: s["creators"].update(weights=weights))
+    return {"weights": weights}
+
+
 def _creator(aid: str, username: str) -> dict:
     creator = next((c for c in _get(aid)["creators"]["items"] if c["username"] == username), None)
     if not creator:
@@ -287,7 +330,10 @@ def _creator(aid: str, username: str) -> dict:
 
 @router.get("/{aid}/creators/{username}")
 def creator(aid: str, username: str) -> dict:
-    return discovery.public_creator(_creator(aid, username))
+    state = _get(aid)["creators"]
+    wanted = _creator(aid, username)
+    ranked = scoring.attach([c for c in state["items"] if c.get("score")] + ([] if wanted.get("score") else [wanted]), state["weights"])
+    return discovery.public_creator(next(c for c in ranked if c["username"] == username))
 
 
 @router.get("/{aid}/creators/{username}/picture/{kind}")

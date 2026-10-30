@@ -263,7 +263,7 @@ def apply_filters(creators: list[dict], f: Filters, now: datetime | None = None)
 
 def start(aid: str, plan: list[dict]) -> dict:
     """Mark the search as running and hand it to a thread. The caller has already checked the profile and the token."""
-    state = analyses.update(aid, lambda s: s["creators"].update({**analyses.EMPTY_CREATORS, "status": "running", "plan": plan, "items": s["creators"]["items"], "enrich": s["creators"]["enrich"]}))  # the old list stays until the new one replaces it
+    state = analyses.update(aid, lambda s: s["creators"].update({**analyses.EMPTY_CREATORS, "status": "running", "plan": plan, "items": s["creators"]["items"], **{k: s["creators"][k] for k in ("enrich", "scoring", "weights")}}))  # the old list stays until the new one replaces it
     analyses.spawn(run, aid, plan)
     return state
 
@@ -326,6 +326,7 @@ def run(aid: str, plan: list[dict]) -> None:
             old = next((o for o in state["creators"]["items"] if o["username"] == c["username"] and o.get("metrics")), None)
             if old:
                 c["metrics"], c["last_post"] = old["metrics"], old["last_post"]
+                c.update({k: old[k] for k in ("judged", "score") if k in old})
         problem = _sort_accounts(aid, state["profile"], creators, state["creators"]["items"])
     except (UpstreamError, httpx.HTTPError) as exc:
         message = str(exc) if isinstance(exc, UpstreamError) else "Network error while contacting an external service."

@@ -13,7 +13,7 @@ from tests.test_brand import VALID
 
 class PromptStoreTest(DataDirTestCase):
     def test_both_prompts_are_registered_and_split_into_instructions_and_a_fixed_format(self):
-        self.assertEqual({p.id for p in prompts.all_prompts()}, {"brand_brief", "account_sorting"})
+        self.assertEqual({p.id for p in prompts.all_prompts()}, {"brand_brief", "account_sorting", "creator_scoring"})
         for p in prompts.all_prompts():
             self.assertNotIn(p.marker, p.default_instructions, p.id)
             self.assertTrue(p.output_format.startswith(p.marker), p.id)

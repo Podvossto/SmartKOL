@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from . import analyses, apify_runner, config, discovery
+from . import analyses, apify_runner, config, discovery, scoring
 from .clients import UpstreamError
 
 MIN_VIDEOS, MAX_VIDEOS = 3, 30
@@ -64,6 +64,7 @@ def metrics(vids: list[dict], now: datetime | None = None) -> dict:
         "videos": len(vids),
         "median_views": int(statistics.median(views)) if views else 0,
         "median_er": round(statistics.median(rates), 4) if rates else None,
+        "views_cv": round(statistics.pstdev(views) / statistics.mean(views), 3) if len(views) > 1 and statistics.mean(views) else None,
         "posts_per_week": round((len(dated) - 1) / span_days * 7, 2) if span_days >= 1 else None,
         "last_post": newest.isoformat() if newest else None,
         "days_since_last_post": (now - newest).days if newest else None,
@@ -115,6 +116,7 @@ def run(aid: str, usernames: list[str], videos: int) -> None:
 
     def done(s):
         filled = apply(s["creators"]["items"], items)
+        scoring.build(s["creators"]["items"])  # fresh numbers, fresh scores (the model's judgement is kept)
         missing = [u for u in usernames if not any(c["username"] == u and "metrics" in c for c in s["creators"]["items"])]
         s["creators"]["enrich"].update(status="done", usd=round(usd, 5), cached=cached, missing=missing, filled=filled, read_at=datetime.now(timezone.utc).isoformat())
         s["cost"]["apify_usd"] = round(s["cost"]["apify_usd"] + usd, 5)

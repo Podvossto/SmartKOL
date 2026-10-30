@@ -6,6 +6,7 @@ Three ways in, depending on what the user typed:
   website only       -> read the site, find Facebook links, let the user confirm one -> profile
                         (run_discovery, then run_profile after the confirmation)
 """
+import copy
 import json
 import logging
 import statistics
@@ -32,7 +33,8 @@ STORED_PAGE_CHARS = 8000
 POSTS_TO_READ = 10
 # The TikTok creator search of one analysis (app/discovery.py fills it in).
 EMPTY_CREATORS = {"status": "idle", "phase": None, "plan": [], "hashtags": [], "videos": 0, "usd": 0.0, "cached": False,
-                  "searched_at": None, "error": None, "classify_error": None, "items": [], "enrich": {}}
+                  "searched_at": None, "error": None, "classify_error": None, "items": [], "enrich": {}, "scoring": {},
+                  "weights": {"relevance": 40, "engagement": 25, "audience": 20, "activity": 15}}
 
 
 def spawn(fn, *args) -> None:
@@ -103,7 +105,7 @@ def _normalize(s: dict) -> dict:
         s.setdefault(key, default)
     s.setdefault("creators", dict(EMPTY_CREATORS, hashtags=[], items=[]))
     for key, default in EMPTY_CREATORS.items():  # a search saved by an older version lacks newer fields
-        s["creators"].setdefault(key, type(default)() if isinstance(default, (list, dict)) else default)
+        s["creators"].setdefault(key, copy.deepcopy(default))
     s.setdefault("internal", {}).setdefault("site_pages", [])
     if s["profile"]:
         try:  # a profile written by an older version is carried into the current structure
@@ -148,6 +150,9 @@ def mark_interrupted() -> None:
             update(aid, lambda s: s.update(status="error", error="The server restarted while this analysis was running. Start it again."))
         if (state.get("creators") or {}).get("status") == "running":
             update(aid, lambda s: s["creators"].update(status="error", error="The server restarted during the search. Search again."))
+        for job, word in (("enrich", "read"), ("scoring", "scoring")):
+            if (state.get("creators") or {}).get(job, {}).get("status") == "running":
+                update(aid, lambda s, job=job, word=word: s["creators"][job].update(status="error", error=f"The server restarted during the {word}. Try again."))
 
 
 def _step(aid: str, key: str, state_name: str, detail: str | None = None) -> None:
