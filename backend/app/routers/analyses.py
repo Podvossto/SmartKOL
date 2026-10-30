@@ -112,17 +112,20 @@ def read(aid: str) -> dict:
     return analyses.public(_get(aid))
 
 
+def _image(content_type: str, data: bytes) -> Response:
+    return Response(data, media_type=content_type, headers={
+        "Cache-Control": "private, max-age=86400",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",  # an SVG can't run script
+    })
+
+
 @router.get("/{aid}/logo")
 def logo(aid: str) -> Response:
     found = logos.load(aid)
     if not found:
         raise _problem("No logo", status=404)
-    content_type, data = found
-    return Response(data, media_type=content_type, headers={
-        "Cache-Control": "private, max-age=86400",
-        "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",  # an SVG logo can't run script
-    })
+    return _image(*found)
 
 
 @router.get("/{aid}/media/{key}")
@@ -130,12 +133,7 @@ def picture(aid: str, key: str) -> Response:
     found = media.load(aid, key) if media.KEY.match(key) else None
     if not found:
         raise _problem("No such picture", status=404)
-    content_type, data = found
-    return Response(data, media_type=content_type, headers={
-        "Cache-Control": "private, max-age=86400",
-        "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-    })
+    return _image(*found)
 
 
 @router.delete("/{aid}")
@@ -221,9 +219,32 @@ def creators_search(aid: str, body: SearchIn, http: httpx.Client = Depends(get_h
 
 @router.get("/{aid}/creators")
 def creators(aid: str, thai_min: float = 0.6, skip_private: bool = True, max_age_days: int = 30, min_followers: int = 10_000,
-             max_followers: int = 0) -> dict:
+             max_followers: int = 0, skip_shops: bool = True) -> dict:
     """The found creators after the hard filters. A numeric filter set to 0 is off. Costs nothing."""
     found = _get(aid)["creators"]["items"]
-    filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None)
+    filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None, skip_shops)
     kept, dropped = discovery.apply_filters(found, filters)
-    return {"total": len(found), "kept": kept, "dropped": dropped}
+    return {"total": len(found), "kept": [discovery.public_creator(c) for c in kept], "dropped": dropped}
+
+
+def _creator(aid: str, username: str) -> dict:
+    creator = next((c for c in _get(aid)["creators"]["items"] if c["username"] == username), None)
+    if not creator:
+        raise _problem("No such creator in this search", status=404)
+    return creator
+
+
+@router.get("/{aid}/creators/{username}")
+def creator(aid: str, username: str) -> dict:
+    return discovery.public_creator(_creator(aid, username))
+
+
+@router.get("/{aid}/creators/{username}/picture/{kind}")
+def creator_picture(aid: str, username: str, kind: str, http: httpx.Client = Depends(get_http)) -> Response:
+    """Avatar or video cover of a creator, downloaded by the server the first time it is asked for."""
+    if kind != "avatar" and not (kind.isdigit() and int(kind) < discovery.SAMPLES):
+        raise _problem("No such picture", status=404)
+    found = discovery.picture(http, aid, _creator(aid, username), kind)
+    if not found:
+        raise _problem("No such picture", status=404)
+    return _image(*found)

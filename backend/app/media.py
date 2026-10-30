@@ -78,13 +78,18 @@ def save_all(analysis_id: str, items: list[tuple[dict, str, bytes]]) -> list[dic
     """Store the copies; returns the public description of each (never the original, expiring URL)."""
     described, n = [], 0
     with connect() as conn:
-        conn.execute("DELETE FROM analysis_media WHERE analysis_id = ?", (analysis_id,))
+        conn.execute("DELETE FROM analysis_media WHERE analysis_id = ? AND key NOT LIKE 'c-%'", (analysis_id,))  # creator pictures stay
         for spec, content_type, data in items:
             key = "banner" if spec["role"] == "banner" else f"s{n}"
             n += spec["role"] != "banner"
             conn.execute("INSERT INTO analysis_media (analysis_id, key, content_type, data) VALUES (?, ?, ?, ?)", (analysis_id, key, content_type, data))
             described.append({"key": key, "role": spec["role"], "source": spec["source"], "link": spec["link"], "caption": spec["caption"], "video": spec["video"]})
     return described
+
+
+def save_one(analysis_id: str, key: str, content_type: str, data: bytes) -> None:
+    with connect() as conn:
+        conn.execute("INSERT OR REPLACE INTO analysis_media (analysis_id, key, content_type, data) VALUES (?, ?, ?, ?)", (analysis_id, key, content_type, data))
 
 
 def load(analysis_id: str, key: str) -> tuple[str, bytes] | None:

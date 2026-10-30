@@ -2,8 +2,11 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
+import json
+
 from app import analyses, apify_runner, discovery
 from app.clients import UpstreamError
+from app.llm import Completion
 from tests.test_analyses import SITE, ApiTestCase
 
 NOW = datetime.now(timezone.utc)
@@ -12,9 +15,9 @@ NOW = datetime.now(timezone.utc)
 def video(user, days_ago=2, lang="th", fans=50_000, views=1000, private=False, tag="ของหวาน", **extra):
     return {
         "authorMeta": {"name": user, "nickName": user.title(), "fans": fans, "heart": 9, "video": 40, "verified": False,
-                       "privateAccount": private, "signature": "รีวิวขนม ติดต่อ 081-234-5678 หรือ me@mail.com"},
+                       "privateAccount": private, "avatar": f"https://cdn.example/{user}/avatar.jpg", "signature": "รีวิวขนม ติดต่อ 081-234-5678 หรือ me@mail.com"},
         "createTimeISO": (NOW - timedelta(days=days_ago)).isoformat(), "textLanguage": lang, "playCount": views,
-        "text": "เมนูใหม่ โทร 0812345678", "webVideoUrl": f"https://www.tiktok.com/@{user}/video/1", "searchHashtag": {"name": tag}, **extra,
+        "text": "เมนูใหม่ โทร 0812345678", "videoMeta": {"coverUrl": f"https://cdn.example/{user}/cover.jpg"}, "webVideoUrl": f"https://www.tiktok.com/@{user}/video/1", "searchHashtag": {"name": tag}, **extra,
     }
 
 
@@ -40,13 +43,29 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(amy["url"], "https://www.tiktok.com/@amy")
         self.assertEqual(amy["hashtags"], ["a", "b", "ของหวาน"])
         self.assertEqual(amy["last_post"], (NOW - timedelta(days=1)).isoformat())
-        self.assertEqual([s["views"] for s in amy["samples"]], [900, 300])
+        self.assertEqual([s["views"] for s in amy["samples"]], [900, 300, 100])
 
     def test_no_phone_or_email_survives_in_a_stored_record(self):
         stored = str(discovery.group_creators([video("amy")]))
         self.assertNotIn("081", stored)
         self.assertNotIn("@mail", stored)
         self.assertIn("[hidden]", stored)
+
+
+class PublicTest(unittest.TestCase):
+    def test_the_browser_never_gets_a_tiktok_picture_link(self):
+        raw = discovery.group_creators([video("amy")])[0]
+        self.assertEqual(raw["avatar_src"], "https://cdn.example/amy/avatar.jpg")
+        shown = discovery.public_creator(raw)
+        self.assertNotIn("cdn.example", str(shown))
+        self.assertTrue(shown["has_avatar"])
+        self.assertTrue(shown["samples"][0]["has_cover"])
+        self.assertNotIn("avatar_src", shown)
+
+    def test_a_creator_without_pictures_says_so(self):
+        raw = discovery.group_creators([{**video("amy"), "videoMeta": {}, "authorMeta": {"name": "amy"}}])[0]
+        shown = discovery.public_creator(raw)
+        self.assertEqual((shown["has_avatar"], shown["samples"][0]["has_cover"]), (False, False))
 
 
 class FilterTest(unittest.TestCase):
@@ -60,7 +79,7 @@ class FilterTest(unittest.TestCase):
     def test_defaults_follow_the_spec(self):
         kept, dropped = discovery.apply_filters(self.pool, discovery.Filters(), NOW)
         self.assertEqual(self.names(kept), ["giant", "good"])
-        self.assertEqual(dropped, {"thai": 1, "private": 1, "recent": 1, "min_followers": 1, "max_followers": 0})
+        self.assertEqual(dropped, {"thai": 1, "private": 1, "recent": 1, "min_followers": 1, "max_followers": 0, "shops": 0})
 
     def test_each_filter_can_be_turned_off_on_its_own(self):
         off = {"thai": dict(thai_min=None), "private": dict(skip_private=False), "recent": dict(max_age_days=None), "min_followers": dict(min_followers=None)}
@@ -70,11 +89,65 @@ class FilterTest(unittest.TestCase):
         kept, _ = discovery.apply_filters(self.pool, discovery.Filters(None, False, None, None, None), NOW)
         self.assertEqual(len(kept), 6)
 
+    def test_shops_and_media_are_hidden_unless_the_filter_is_off_and_unlabelled_accounts_stay(self):
+        pool = discovery.group_creators([video(n) for n in ("person", "shop", "page", "mystery", "unsorted")])
+        for c in pool:
+            c["kind"] = {"person": "creator", "shop": "shop", "page": "media", "mystery": "other"}.get(c["username"])
+        kept, dropped = discovery.apply_filters(pool, discovery.Filters(), NOW)
+        self.assertEqual((self.names(kept), dropped["shops"]), (["mystery", "person", "unsorted"], 2))
+        self.assertEqual(len(discovery.apply_filters(pool, discovery.Filters(skip_shops=False), NOW)[0]), 5)
+
     def test_follower_range_and_a_missing_value(self):
         kept, dropped = discovery.apply_filters(self.pool, discovery.Filters(max_followers=1_000_000), NOW)
         self.assertEqual((self.names(kept), dropped["max_followers"]), (["good"], 1))
         unknown = [{**self.pool[0], "followers": None, "last_post": None}]
         self.assertEqual(discovery.apply_filters(unknown, discovery.Filters(), NOW)[0], [])
+
+
+def labelled(**kinds):
+    """A language-model reply that labels the accounts named in the prompt. Anyone not named is a creator."""
+    def reply(http, cfg, system, user, max_tokens=1500):
+        names = [line.split(" | ")[0].lstrip("@") for line in user.splitlines() if line.startswith("@")]
+        rows = [{"u": n, "kind": kinds.get(n, "creator"), "competitor": kinds.get(n) == "shop", "reason": "bio sells cakes"} for n in names]
+        return Completion(json.dumps(rows), "test-model", 100, 500, 80, 0.0004)
+    return reply
+
+
+class ClassifyTest(unittest.TestCase):
+    CFG = mock.Mock(model="test-model")
+    PROFILE = {"brand_name": "After You", "category": "Dessert cafe", "products": ["toast"]}
+
+    def accounts(self, *names):
+        return discovery.group_creators([video(n) for n in names])
+
+    def run_classify(self, creators, **kw):
+        with mock.patch.object(discovery.llm, "complete", **kw) as complete:
+            return discovery.classify(None, self.CFG, self.PROFILE, creators), complete
+
+    def test_labels_are_read_back_and_only_a_shop_can_be_a_competitor(self):
+        (labels, usage), _ = self.run_classify(self.accounts("amy", "cafe"), side_effect=labelled(cafe="shop"))
+        self.assertEqual((labels["amy"]["kind"], labels["amy"]["competitor"]), ("creator", False))
+        self.assertEqual((labels["cafe"]["kind"], labels["cafe"]["competitor"], labels["cafe"]["reason"]), ("shop", True, "bio sells cakes"))
+        self.assertEqual((usage["input_tokens"], usage["output_tokens"], usage["cost_usd"]), (500, 80, 0.0004))
+
+    def test_a_bad_or_incomplete_reply_labels_nobody_wrongly(self):
+        reply = '[{"u": "amy", "kind": "influencer"}, {"u": "ghost", "kind": "shop"}, {"u": "bob", "kind": "media", "competitor": true}, "junk"]'
+        (labels, _), _ = self.run_classify(self.accounts("amy", "bob"), return_value=Completion(reply, "m", 1, 1, 1, None))
+        self.assertEqual(labels, {"bob": {"kind": "media", "competitor": False, "reason": ""}})
+        (labels, _), _ = self.run_classify(self.accounts("amy"), return_value=Completion("sorry, no", "m", 1, 1, 1, None))
+        self.assertEqual(labels, {})
+
+    def test_many_accounts_are_sent_in_batches_and_the_usage_is_summed(self):
+        with mock.patch.object(discovery, "CLASSIFY_BATCH", 2):
+            (labels, usage), complete = self.run_classify(self.accounts("a", "b", "c", "d", "e"), side_effect=labelled())
+        self.assertEqual((complete.call_count, len(labels), usage["input_tokens"]), (3, 5, 1500))
+
+    def test_the_prompt_carries_the_brand_and_what_each_account_says_about_itself(self):
+        _, complete = self.run_classify(self.accounts("amy"), side_effect=labelled())
+        prompt = complete.call_args.args[3]
+        self.assertIn("After You", prompt)
+        self.assertIn("@amy | 50000 followers", prompt)
+        self.assertIn("[hidden]", prompt)  # contact details never reach the model either
 
 
 class PlanTest(unittest.TestCase):
@@ -102,6 +175,9 @@ class SearchApiTest(ApiTestCase):
         self.aid = self.run_analysis(website_url=SITE, facebook_url="https://www.facebook.com/afteryoucafe")["id"]
         self.actor = mock.patch.object(apify_runner, "run_actor", return_value=([video("amy"), video("amy", days_ago=5), video("bob", lang="en")], 0.28, False))
         self.account = mock.patch("app.clients.apify_account", return_value={"remaining_usd": 4.0})
+        self.sorter = mock.patch.object(discovery.llm, "complete", side_effect=labelled(bob="shop"))
+        self.sort = self.sorter.start()
+        self.addCleanup(self.sorter.stop)
         self.run = self.actor.start()
         self.account.start()
         self.addCleanup(self.actor.stop)
@@ -127,7 +203,7 @@ class SearchApiTest(ApiTestCase):
         self.run.reset_mock()
         listing = self.client.get(f"/api/analyses/{self.aid}/creators").json()
         self.assertEqual((listing["total"], [c["username"] for c in listing["kept"]], listing["dropped"]["thai"]), (2, ["amy"], 1))
-        every = self.client.get(f"/api/analyses/{self.aid}/creators", params={"thai_min": 0}).json()
+        every = self.client.get(f"/api/analyses/{self.aid}/creators", params={"thai_min": 0, "skip_shops": False}).json()
         self.assertEqual(len(every["kept"]), 2)
         self.run.assert_not_called()
 
@@ -158,6 +234,66 @@ class SearchApiTest(ApiTestCase):
         analyses.update(self.aid, lambda s: s["creators"].update(status="running"))
         analyses.mark_interrupted()
         self.assertEqual(self.get(self.aid)["creators"]["status"], "error")
+
+    def test_pictures_are_fetched_once_by_the_server_and_then_kept(self):
+        self.search()
+        with mock.patch.object(discovery.logos, "fetch", return_value=("image/jpeg", b"JPEG")) as fetch:
+            url = f"/api/analyses/{self.aid}/creators/amy/picture"
+            first = self.client.get(f"{url}/avatar")
+            self.assertEqual((first.status_code, first.content, first.headers["content-type"]), (200, b"JPEG", "image/jpeg"))
+            self.assertEqual(self.client.get(f"{url}/0").status_code, 200)
+            self.client.get(f"{url}/avatar")
+            self.assertEqual([c.args[1] for c in fetch.call_args_list], ["https://cdn.example/amy/avatar.jpg", "https://cdn.example/amy/cover.jpg"])
+        with mock.patch.object(discovery.logos, "fetch", return_value=None):
+            self.assertEqual(self.client.get(f"{url}/1").status_code, 404)  # nothing to fetch for a video that isn't there
+        for bad in ("/creators/nobody/picture/avatar", "/creators/amy/picture/9", "/creators/amy/picture/x"):
+            self.assertEqual(self.client.get(f"/api/analyses/{self.aid}{bad}").status_code, 404, bad)
+
+    def test_refreshing_the_brand_pictures_keeps_the_creator_pictures(self):
+        self.search()
+        with mock.patch.object(discovery.logos, "fetch", return_value=("image/png", b"PNG")):
+            self.client.get(f"/api/analyses/{self.aid}/creators/amy/picture/avatar")
+        discovery.media.save_all(self.aid, [])
+        self.assertIsNotNone(discovery.media.load(self.aid, "c-amy-avatar"))
+        self.assertEqual(self.client.get(f"/api/analyses/{self.aid}/media/c-amy-avatar").status_code, 404)  # not reachable as brand media
+
+    def test_one_creator_can_be_read_for_the_detail_page(self):
+        self.search()
+        res = self.client.get(f"/api/analyses/{self.aid}/creators/amy").json()
+        self.assertEqual((res["username"], res["has_avatar"], len(res["samples"])), ("amy", True, 2))
+        self.assertEqual(self.client.get(f"/api/analyses/{self.aid}/creators/zed").status_code, 404)
+
+    def test_shops_are_labelled_hidden_by_default_and_the_model_cost_is_added(self):
+        before = self.get(self.aid)["cost"]
+        self.search()
+        everyone = self.client.get(f"/api/analyses/{self.aid}/creators", params={"thai_min": 0, "skip_shops": False}).json()["kept"]
+        self.assertEqual({c["username"]: (c["kind"], c["competitor"], c["kind_reason"]) for c in everyone},
+                         {"amy": ("creator", False, "bio sells cakes"), "bob": ("shop", True, "bio sells cakes")})
+        listing = self.client.get(f"/api/analyses/{self.aid}/creators", params={"thai_min": 0}).json()
+        self.assertEqual(([c["username"] for c in listing["kept"]], listing["dropped"]["shops"]), (["amy"], 1))
+        after = self.get(self.aid)
+        self.assertEqual((after["creators"]["classify_error"], after["creators"]["phase"]), (None, None))
+        self.assertEqual((after["cost"]["llm_input_tokens"] - before["llm_input_tokens"], round(after["cost"]["llm_usd"] - before["llm_usd"], 6)), (500, 0.0004))
+
+    def test_searching_again_keeps_the_labels_without_asking_the_model_again(self):
+        self.search()
+        self.sort.reset_mock()
+        self.search()
+        self.sort.assert_not_called()
+        self.assertEqual(self.client.get(f"/api/analyses/{self.aid}/creators/bob").json()["kind"], "shop")
+
+    def test_a_model_failure_does_not_fail_the_search_or_hide_anything(self):
+        self.sort.side_effect = UpstreamError("LLM provider error 402")
+        self.search()
+        creators = self.get(self.aid)["creators"]
+        self.assertEqual((creators["status"], creators["found"]), ("done", 2))
+        self.assertIn("402", creators["classify_error"])
+        self.assertEqual(len(self.client.get(f"/api/analyses/{self.aid}/creators", params={"thai_min": 0}).json()["kept"]), 2)
+
+    def test_an_incomplete_labelling_is_reported(self):
+        self.sort.side_effect = lambda http, cfg, system, user, max_tokens=1500: Completion('[{"u": "amy", "kind": "creator"}]', "m", 1, 1, 1, None)
+        self.search()
+        self.assertIn("1 of 2", self.get(self.aid)["creators"]["classify_error"])
 
     def test_old_analyses_without_the_field_still_open(self):
         analyses.update(self.aid, lambda s: s.pop("creators"))

@@ -31,8 +31,8 @@ MAX_CANDIDATES = 3
 STORED_PAGE_CHARS = 8000
 POSTS_TO_READ = 10
 # The TikTok creator search of one analysis (app/discovery.py fills it in).
-EMPTY_CREATORS = {"status": "idle", "preset": None, "hashtags": [], "videos": 0, "usd": 0.0, "cached": False,
-                  "searched_at": None, "error": None, "items": []}
+EMPTY_CREATORS = {"status": "idle", "phase": None, "preset": None, "hashtags": [], "videos": 0, "usd": 0.0, "cached": False,
+                  "searched_at": None, "error": None, "classify_error": None, "items": []}
 
 
 def spawn(fn, *args) -> None:
