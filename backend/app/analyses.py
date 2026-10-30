@@ -30,6 +30,9 @@ PROFILE_STEPS = [("posts", "Reading recent Facebook posts"), ("profile", "Writin
 MAX_CANDIDATES = 3
 STORED_PAGE_CHARS = 8000
 POSTS_TO_READ = 10
+# The TikTok creator search of one analysis (app/discovery.py fills it in).
+EMPTY_CREATORS = {"status": "idle", "preset": None, "hashtags": [], "videos": 0, "usd": 0.0, "cached": False,
+                  "searched_at": None, "error": None, "items": []}
 
 
 def spawn(fn, *args) -> None:
@@ -74,6 +77,7 @@ def create(website_url: str | None, facebook_url: str | None, warnings: list[str
         "selected_facebook": None,
         "requested_facebook": None,
         "profile": None,
+        "creators": dict(EMPTY_CREATORS, hashtags=[], items=[]),
         "has_logo": False,
         "media": [],
         "cost": {"apify_usd": 0.0, "llm_usd": 0.0, "llm_known": True, "llm_input_tokens": 0, "llm_output_tokens": 0,
@@ -97,6 +101,7 @@ def _normalize(s: dict) -> dict:
     for key, default in (("has_logo", False), ("media", []), ("warnings", []), ("facebook", None), ("facebook_candidates", []), ("selected_facebook", None),
                          ("requested_facebook", None), ("recommended", None), ("profile", None), ("website", None), ("error", None)):
         s.setdefault(key, default)
+    s.setdefault("creators", dict(EMPTY_CREATORS, hashtags=[], items=[]))
     s.setdefault("internal", {}).setdefault("site_pages", [])
     if s["profile"]:
         try:  # a profile written by an older version is carried into the current structure
@@ -125,7 +130,10 @@ def update(aid: str, mutate) -> dict:
 
 
 def public(state: dict) -> dict:
-    return {k: v for k, v in state.items() if k != "internal"}
+    """The creator list is served by its own endpoint (filtered), so polling an analysis stays light."""
+    out = {k: v for k, v in state.items() if k != "internal"}
+    out["creators"] = {**{k: v for k, v in state["creators"].items() if k != "items"}, "found": len(state["creators"]["items"])}
+    return out
 
 
 def mark_interrupted() -> None:
@@ -133,8 +141,11 @@ def mark_interrupted() -> None:
     with connect() as conn:
         rows = conn.execute("SELECT id, state FROM analyses").fetchall()
     for aid, raw in rows:
-        if json.loads(raw)["status"] in ("running", "profiling"):
+        state = json.loads(raw)
+        if state["status"] in ("running", "profiling"):
             update(aid, lambda s: s.update(status="error", error="The server restarted while this analysis was running. Start it again."))
+        if (state.get("creators") or {}).get("status") == "running":
+            update(aid, lambda s: s["creators"].update(status="error", error="The server restarted during the search. Search again."))
 
 
 def _step(aid: str, key: str, state_name: str, detail: str | None = None) -> None:

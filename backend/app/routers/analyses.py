@@ -3,7 +3,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
-from .. import analyses, brand, clients, config, logos, media, preflight
+from .. import analyses, brand, clients, config, discovery, logos, media, preflight
 from ..social import normalize_facebook, validate_public_url
 from .settings import get_http
 
@@ -14,6 +14,10 @@ class StartIn(BaseModel):
     website_url: str | None = None
     facebook_url: str | None = None
     find_facebook: bool = False  # website only: also look for its Facebook page and let the user confirm one
+
+
+class SearchIn(BaseModel):
+    preset: str = "lean"
 
 
 class ConfirmIn(BaseModel):
@@ -166,3 +170,60 @@ def edit_profile(aid: str, body: brand.BrandProfile) -> dict:
     changed = {key for key in ("tiktok", "creator_fit") if edited[key] != current.get(key)}
     edited["edited"] = sorted(set(current.get("edited", [])) | changed)
     return analyses.public(analyses.update(aid, lambda s: s.update(profile=edited)))
+
+
+def _preset(name: str) -> str:
+    if name not in discovery.PRESETS:
+        raise _problem(f"Unknown budget '{name}'. Use one of: {', '.join(discovery.PRESETS)}.", "preset")
+    return name
+
+
+def _ready_profile(state: dict) -> dict:
+    if not state["profile"]:
+        raise _problem("Finish the brand profile before searching for creators.", status=409)
+    return state["profile"]
+
+
+@router.post("/{aid}/creators/estimate")
+def creators_estimate(aid: str, body: SearchIn, http: httpx.Client = Depends(get_http)) -> dict:
+    """What a creator search would cost, and how many Apify credits are left. Nothing paid runs here."""
+    cost = discovery.estimate(_ready_profile(_get(aid)), _preset(body.preset))
+    token, _ = config.apify_token()
+    account = None
+    if token:
+        try:
+            account = clients.apify_account(http, token)
+        except (clients.UpstreamError, httpx.HTTPError):
+            account = None
+    return {"estimate": cost, "account": account}
+
+
+@router.post("/{aid}/creators/search")
+def creators_search(aid: str, body: SearchIn, http: httpx.Client = Depends(get_http)) -> dict:
+    state = _get(aid)
+    profile, preset = _ready_profile(state), _preset(body.preset)
+    if state["creators"]["status"] == "running":
+        raise _problem("A search is already running.", status=409)
+    token, _ = config.apify_token()
+    if not token:
+        raise _problem("Apify token is not set. Add it in Settings first.")
+    cost = discovery.estimate(profile, preset)
+    if not cost["hashtags"]:
+        raise _problem("Add at least one hashtag to search.", "hashtags")
+    try:
+        left = clients.apify_account(http, token)["remaining_usd"]
+    except (clients.UpstreamError, httpx.HTTPError):
+        left = None  # unknown: the run itself will fail clearly if the account is empty
+    if left is not None and cost["usd"] > left:
+        raise _problem(f"This search needs about ${cost['usd']:.2f} but only ${left:.2f} of Apify credit is left.")
+    return analyses.public(discovery.start(aid, preset))
+
+
+@router.get("/{aid}/creators")
+def creators(aid: str, thai_min: float = 0.6, skip_private: bool = True, max_age_days: int = 30, min_followers: int = 10_000,
+             max_followers: int = 0) -> dict:
+    """The found creators after the hard filters. A numeric filter set to 0 is off. Costs nothing."""
+    found = _get(aid)["creators"]["items"]
+    filters = discovery.Filters(thai_min or None, skip_private, max_age_days or None, min_followers or None, max_followers or None)
+    kept, dropped = discovery.apply_filters(found, filters)
+    return {"total": len(found), "kept": kept, "dropped": dropped}
