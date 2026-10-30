@@ -37,6 +37,18 @@ export type LlmPing = {
   cost_usd: number | null;
 };
 
+/** One prompt the AI is given. Only `text` (the instructions) can be edited; `output_format` is fixed. */
+export type PromptView = {
+  id: string;
+  title: string;
+  description: string;
+  used_when: string;
+  text: string;
+  default: string;
+  edited: boolean;
+  output_format: string;
+};
+
 const call = <T>(method: string, path: string, body?: unknown) => request<T>(method, `/api/settings${path}`, body);
 
 export const settingsApi = {
@@ -54,6 +66,9 @@ export const settingsApi = {
   clearLlm: () => call<SettingsView>("DELETE", "/llm"),
   llmBalance: () => call<LlmBalance>("POST", "/llm/balance"),
   testLlm: () => call<LlmPing>("POST", "/llm/test"),
+  prompts: () => call<PromptView[]>("GET", "/prompts"),
+  savePrompt: (id: string, text: string) => call<PromptView>("PUT", `/prompts/${id}`, { text }),
+  resetPrompt: (id: string) => call<PromptView>("DELETE", `/prompts/${id}`),
   exchangeOpenRouter: (code: string, code_verifier: string) =>
     call<SettingsView>("POST", "/openrouter/exchange", { code, code_verifier }),
 };
