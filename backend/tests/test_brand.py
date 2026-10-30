@@ -86,6 +86,14 @@ class ParseProfileTest(unittest.TestCase):
             brand.parse_profile("Sorry, I cannot help with that.")
 
 
+class PromptTest(unittest.TestCase):
+    def test_hashtags_are_asked_for_in_the_words_creators_use_not_shops(self):
+        rule = next(line for line in brand.SYSTEM.splitlines() if line.startswith("- tiktok.hashtags_th"))
+        self.assertIn("CREATORS", rule)
+        self.assertIn("competitors", rule)
+        self.assertIn("first few", rule)  # a lean search only uses the first tags, so their order matters
+
+
 class BuildProfileTest(unittest.TestCase):
     def test_retries_once_and_sums_usage(self):
         with mock.patch.object(brand.llm, "complete", side_effect=[reply("not json", cost=0.002), reply(VALID, cost=0.003)]) as m:
