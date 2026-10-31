@@ -19,7 +19,7 @@ Picking creators for a brand is slow: someone opens profile after profile and de
 
 ## Quick start
 ```bash
-git clone <repo-url> smartkol && cd smartkol
+git clone https://github.com/Podvossto/SmartKOL.git smartkol && cd smartkol
 docker compose up --build
 # open http://localhost:3000, then Settings: add your Apify token and a model (or "Connect with OpenRouter")
 ```
