@@ -5,11 +5,14 @@ Only public, business-relevant fields go in: no bio (it can carry contact detail
 import csv
 import io
 
+from . import discovery
+
 COLUMNS = [
     ("rank", lambda c: c.get("rank")),
     ("username", lambda c: c["username"]),
     ("name", lambda c: c["nickname"]),
     ("tiktok_url", lambda c: c["url"]),
+    ("contact_in_bio", lambda c: " | ".join(discovery.contacts(c.get("bio")))),
     ("followers", lambda c: c["followers"]),
     ("total_score", lambda c: c.get("total")),
     ("fit_score", lambda c: (c.get("score") or {}).get("relevance")),

@@ -46,11 +46,15 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(amy["last_post"], (NOW - timedelta(days=1)).isoformat())
         self.assertEqual([s["views"] for s in amy["samples"]], [900, 300, 100])
 
-    def test_no_phone_or_email_survives_in_a_stored_record(self):
-        stored = str(discovery.group_creators([video("amy")]))
-        self.assertNotIn("081", stored)
-        self.assertNotIn("@mail", stored)
-        self.assertIn("[hidden]", stored)
+    def test_a_bio_keeps_its_contact_details_but_captions_do_not(self):
+        amy = discovery.group_creators([video("amy")])[0]
+        self.assertIn("081", amy["bio"])
+        self.assertIn("@mail", amy["bio"])
+        self.assertNotRegex(str([s["text"] for s in amy["samples"]]), r"\d{8}|@mail")
+
+    def test_the_contacts_in_a_text_are_listed_once_in_order(self):
+        self.assertEqual(discovery.contacts("งานติดต่อ a@b.com โทร 081-234-5678 หรือ a@b.com"), ["a@b.com", "081-234-5678"])
+        self.assertEqual((discovery.contacts(None), discovery.contacts("รีวิว @brand_official 2024")), ([], []))
 
 
 class PublicTest(unittest.TestCase):

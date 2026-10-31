@@ -86,7 +86,7 @@ export const PHASES: Phase[] = [
         roles: {
           apify: "Reads the videos with clockworks/tiktok-scraper.",
           ai: "Labels each account as a creator, shop or media page, 25 per call.",
-          app: "Makes one record per creator and hides phone numbers and e-mails.",
+          app: "Makes one record per creator; the bio stays as posted, contact details included.",
         },
         price: `${usd(TIKTOK_VIDEO_USD)} a video + ${usd(TIKTOK_RUN_USD)} a run; the same search within ${CACHE_DAYS} days is free.`,
       },

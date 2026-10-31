@@ -148,7 +148,7 @@ def _brand(profile: dict) -> str:
 def _creator_line(c: dict) -> str:
     m = c["metrics"]
     captions = " / ".join(s["text"] for s in c["samples"][:3] if s.get("text"))
-    return (f"@{c['username']} | {c['followers']} followers | name: {c['nickname']} | bio: {' '.join(c['bio'].split())[:200]} | "
+    return (f"@{c['username']} | {c['followers']} followers | name: {c['nickname']} | bio: {' '.join(discovery.mask_contacts(c['bio']).split())[:200]} | "
             f"hashtags: {', '.join(c['hashtags'][:6])} | captions: {captions[:300]} | "
             f"median views {m['median_views']}, ads {m['ad_share']:.0%}, TikTok Shop {m['shop_share']:.0%} | label: {c.get('kind') or 'unknown'}")
 

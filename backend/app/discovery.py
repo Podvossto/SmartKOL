@@ -84,10 +84,19 @@ _PHONE = re.compile(r"(?<![\d@])[+(]?\d(?:[\s().-]{0,2}\d){7,13}(?!\d)")  # digi
 
 
 def mask_contacts(text: str | None) -> str:
-    """Phone numbers and e-mail addresses in a creator's bio or caption are personal data we don't keep."""
+    """Phone numbers and e-mail addresses are hidden in video captions and in what is sent to the model. A creator's own
+    bio keeps them: they put them there for business enquiries, and getting in touch is what this list is for."""
     if not text:
         return ""
     return _PHONE.sub("[hidden]", _EMAIL.sub("[hidden]", text))
+
+
+def contacts(text: str | None) -> list[str]:
+    """The e-mail addresses and phone numbers written in a text, each once, in the order they appear."""
+    if not text:
+        return []
+    found = sorted([*((m.start(), m.group().strip()) for m in _EMAIL.finditer(text)), *((m.start(), m.group().strip()) for m in _PHONE.finditer(text))])
+    return list(dict.fromkeys(value for _, value in found))
 
 
 # ---------- grouping ----------
@@ -149,7 +158,7 @@ def group_creators(videos: list[dict]) -> list[dict]:
             "nickname": meta.get("nickName") or name,
             "url": f"https://www.tiktok.com/@{name}",
             "avatar_src": meta.get("originalAvatarUrl") or meta.get("avatar"),
-            "bio": mask_contacts(meta.get("signature")),
+            "bio": meta.get("signature") or "",
             "followers": meta.get("fans"),
             "likes": meta.get("heart"),
             "total_videos": meta.get("video"),
@@ -199,7 +208,7 @@ prompts.register(prompts.Prompt(
 
 def _account_line(c: dict) -> str:
     captions = " / ".join(s["text"] for s in c["samples"][:2] if s.get("text"))
-    return f"@{c['username']} | {c['followers']} followers | name: {c['nickname']} | bio: {' '.join(c['bio'].split())[:200]} | captions: {captions[:240]}"
+    return f"@{c['username']} | {c['followers']} followers | name: {c['nickname']} | bio: {' '.join(mask_contacts(c['bio']).split())[:200]} | captions: {captions[:240]}"
 
 
 def classify(http: httpx.Client, cfg, profile: dict, creators: list[dict]) -> tuple[dict[str, dict], dict]:
