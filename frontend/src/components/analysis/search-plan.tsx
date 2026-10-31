@@ -2,23 +2,18 @@
 
 import { useEffect, useState } from "react";
 
-import { PlatformIcon } from "@/components/platform-icon";
-import { Card } from "@/components/ui/card";
 import { type Profile, analysisApi } from "@/lib/analysis-api";
 import { errorMessage } from "@/lib/errors";
 
 import { useCurrentAnalysis } from "./context";
-import { Origin } from "./origin";
-import { Eyebrow } from "./panel";
-import { TagEditor } from "./tag-editor";
 
 // One list for the user: the profile keeps Thai and English apart, so they are split again on save.
 const toList = (p: Profile["tiktok"]) => [...p.hashtags_th, ...p.hashtags_en];
 const isThai = (tag: string) => /[฀-๿]/.test(tag);
 const SAVE_DELAY_MS = 700;
 
-/** The hashtags a creator search will use. Every change is saved on its own a moment after you stop typing. */
-export function SearchPlan() {
+/** The hashtags a creator search can use. Every change to the list is saved on its own a moment after you stop typing. */
+export function useHashtagList() {
   const { analysis, adopt } = useCurrentAnalysis();
   const profile = analysis.profile as Profile;
   const [tags, setTags] = useState(toList(profile.tiktok));
@@ -42,27 +37,5 @@ export function SearchPlan() {
     return () => clearTimeout(timer);
   }, [tags, saved, profile, adopt, analysis.id]);
 
-  return (
-    <Card>
-      <section className="flex flex-col gap-5 px-(--card-spacing)">
-        <div className="flex flex-wrap items-center gap-2">
-          <PlatformIcon platform="tiktok" />
-          <Eyebrow>Hashtags to search on TikTok</Eyebrow>
-          <Origin kind="ai" model={analysis.cost.llm_model} />
-          {profile.edited.includes("tiktok") && <span className="text-xs text-muted-foreground">Edited by you</span>}
-          <span className="ml-auto text-xs text-muted-foreground" role="status" aria-live="polite">
-            {status === "saving" && "Saving…"}
-            {status === "saved" && JSON.stringify(tags) === saved && "Saved"}
-          </span>
-        </div>
-        <TagEditor label="Hashtags" hint="Suggested from the brand profile. Remove any that don't fit, or add your own. Changes are saved automatically." prefix="#" tags={tags} onChange={setTags} />
-        {tags.length === 0 && <p className="text-sm text-muted-foreground">Add at least one hashtag to search.</p>}
-        {status === "error" && (
-          <p className="text-sm text-destructive" role="alert">
-            Couldn&apos;t save: {error}. Your last change will be tried again when you edit the list.
-          </p>
-        )}
-      </section>
-    </Card>
-  );
+  return { tags, setTags, status, error, isSaved: JSON.stringify(tags) === saved, edited: profile.edited.includes("tiktok") };
 }

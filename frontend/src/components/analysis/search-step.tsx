@@ -8,7 +8,6 @@ import { useCurrentAnalysis } from "./context";
 import { CreatorSearch } from "./creator-search";
 import { EmptyState, Rise } from "./panel";
 import { SearchMethod } from "./search-method";
-import { SearchPlan } from "./search-plan";
 
 export function SearchStep() {
   const { analysis } = useCurrentAnalysis();
@@ -25,15 +24,12 @@ export function SearchStep() {
     <div className="flex flex-col gap-6">
       <Rise>
         <h2 className="font-heading text-2xl font-semibold tracking-tight">Find creators</h2>
-        <p className="text-muted-foreground">Check the hashtags, choose how many videos to read from each, then run the search.</p>
+        <p className="text-muted-foreground">Pick the hashtags to search. Nothing is spent until you press search.</p>
       </Rise>
       <Rise index={1}>
-        <SearchPlan />
-      </Rise>
-      <Rise index={2}>
         <CreatorSearch />
       </Rise>
-      <Rise index={3}>
+      <Rise index={2}>
         <SearchMethod />
       </Rise>
     </div>
