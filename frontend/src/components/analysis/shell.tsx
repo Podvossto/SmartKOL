@@ -67,9 +67,14 @@ export function AnalysisShell({ children }: { children: React.ReactNode }) {
         <p className="text-destructive" role="alert">
           {error}
         </p>
-        <Link href="/" className={buttonVariants()}>
-          New analysis
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => window.location.reload()} className={buttonVariants({ variant: "outline" })}>
+            Try again
+          </button>
+          <Link href="/" className={buttonVariants()}>
+            Back to home
+          </Link>
+        </div>
       </div>
     );
   }
