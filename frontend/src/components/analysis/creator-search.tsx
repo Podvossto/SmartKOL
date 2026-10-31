@@ -8,6 +8,7 @@ import { PlatformIcon } from "@/components/platform-icon";
 import { Card } from "@/components/ui/card";
 import { PillButton } from "@/components/ui/pill-button";
 import { type CreatorEstimate, type PlanItem, analysisApi } from "@/lib/analysis-api";
+import { AUTO_READ_MAX_USD } from "@/lib/auto-read";
 import { errorMessage } from "@/lib/errors";
 import { usd } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,7 @@ export function CreatorSearch() {
   const list = useHashtagList();
   const tags = list.tags;
   const router = useRouter();
+  const autoRead = useRef(false); // the search that is running was started with the read and the scoring to follow
   const started = useRef(false); // only a search started on this page opens the list; arriving at a finished one does not
   const savedPlan = analysis.creators.plan;
   const [counts, setCounts] = useState<Counts>(() => (savedPlan.length ? Object.fromEntries(savedPlan.map((p) => [p.hashtag, p.videos])) : fill(tags, DEFAULT_TAGS, DEFAULT_VIDEOS)));
@@ -76,6 +78,7 @@ export function CreatorSearch() {
   const [prices, setPrices] = useState<Estimates | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [readAfter, setReadAfter] = useState(true);
   const [advanced, setAdvanced] = useState(() => new Set(savedPlan.map((p) => p.videos)).size > 1); // a saved plan with different counts opens the per-hashtag list
 
   const plan = planOf(tags, counts);
@@ -105,7 +108,7 @@ export function CreatorSearch() {
   useEffect(() => {
     if (started.current && status === "done" && found > 0) {
       started.current = false;
-      router.push(STEPS.find((s) => s.key === "creators")!.href(analysis.id));
+      router.push(STEPS.find((s) => s.key === "creators")!.href(analysis.id) + (autoRead.current ? "?auto=1" : ""));
     }
   }, [status, found, router, analysis.id]);
 
@@ -113,7 +116,9 @@ export function CreatorSearch() {
   const fresh = prices?.key === key ? prices : null;
   const left = fresh?.current?.account?.remaining_usd ?? null;
   const price = fresh?.current?.estimate;
-  const tooPricey = !!price && left != null && price.usd > left;
+  const readUsd = readAfter ? AUTO_READ_MAX_USD : 0;
+  const allUsd = (price?.usd ?? 0) + readUsd;
+  const tooPricey = !!price && left != null && allUsd > left;
   const blocked = !showsSaved && (plan.length === 0 || tooMany || tooPricey || !price);
   const ready = !showsSaved && !tooMany && !tooPricey && !!price && plan.length > 0; // the price is known and the search can go ahead
 
@@ -130,10 +135,11 @@ export function CreatorSearch() {
   }
 
   async function search() {
-    if (showsSaved) return router.push(creatorsHref); // nothing to run: these creators are already stored
+    if (showsSaved) return router.push(creatorsHref + (readAfter ? "?auto=1" : "")); // nothing to search: these creators are already stored
     setStarting(true);
     setError(null);
     started.current = true;
+    autoRead.current = readAfter;
     try {
       adopt(await analysisApi.searchCreators(analysis.id, plan));
     } catch (err) {
@@ -224,6 +230,14 @@ export function CreatorSearch() {
               )}
             </div>
 
+            <label className="flex w-fit items-start gap-2.5 text-sm">
+              <input type="checkbox" checked={readAfter} onChange={(e) => setReadAfter(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
+              <span>
+                Then read and score the top matches
+                <span className="text-muted-foreground"> (up to ≈ {usd(AUTO_READ_MAX_USD)} more)</span>
+              </span>
+            </label>
+
             <div className="flex flex-col gap-4 rounded-2xl bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
               {ready ? (
                 <dl className="grid grid-cols-3 gap-x-6">
@@ -231,9 +245,9 @@ export function CreatorSearch() {
                     <dt className="text-xs text-muted-foreground">videos</dt>
                     <dd className="font-medium tabular-nums">{total}</dd>
                   </div>
-                  <div className="flex flex-col-reverse" title={price.cached ? `Saved copy of an earlier search. A new one would cost about ${usd(price.list_usd)}.` : left != null ? `Of your ${usd(left)} Apify credit. Nothing is spent until you search.` : "Nothing is spent until you search."}>
-                    <dt className="text-xs text-muted-foreground">{price.cached ? "already searched" : "price"}</dt>
-                    <dd className="font-medium tabular-nums">{price.cached ? "Free" : `≈ ${usd(price.usd)}`}</dd>
+                  <div className="flex flex-col-reverse" title={`${price.cached ? `Search: free, a saved copy of an earlier one (a new one would cost about ${usd(price.list_usd)}).` : `Search: about ${usd(price.usd)}.`}${readAfter ? ` Reading the top matches: up to ${usd(AUTO_READ_MAX_USD)}.` : ""}${left != null ? ` Apify credit left: ${usd(left)}.` : ""} Nothing is spent until you press the button.`}>
+                    <dt className="text-xs text-muted-foreground">{readAfter ? "in all" : price.cached ? "already searched" : "price"}</dt>
+                    <dd className="font-medium tabular-nums">{allUsd === 0 ? "Free" : `${readAfter ? "up to " : ""}≈ ${usd(allUsd)}`}</dd>
                   </div>
                   <div className="flex flex-col-reverse" title={CREATORS_TIP}>
                     <dt className="text-xs text-muted-foreground">creators (estimated)</dt>
@@ -245,11 +259,12 @@ export function CreatorSearch() {
                   {showsSaved && (
                     <>
                       <b className="font-medium text-foreground">{found} creators found</b> by this search.
+                    {readAfter && ` Reading the top ones costs up to ${usd(AUTO_READ_MAX_USD)}.`}
                     </>
                   )}
                   {!showsSaved && plan.length === 0 && (tags.length === 0 ? "Add a hashtag to search." : "Pick at least one hashtag.")}
                   {!showsSaved && tooMany && `${total} videos is too many: one search reads at most ${MAX_TOTAL}.`}
-                  {!showsSaved && tooPricey && `Needs about ${usd(price!.usd)} but only ${usd(left!)} of Apify credit is left.`}
+                  {!showsSaved && tooPricey && `Needs ${readAfter ? "up to" : "about"} ${usd(allUsd)} but only ${usd(left!)} of Apify credit is left.${readAfter ? " Untick reading to search only." : ""}`}
                   {!showsSaved && !tooMany && !tooPricey && !price && plan.length > 0 && !error && "Checking the price…"}
                 </p>
               )}

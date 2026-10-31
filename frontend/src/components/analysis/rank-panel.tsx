@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { PillButton } from "@/components/ui/pill-button";
 import { type Creator, type EnrichEstimate, analysisApi } from "@/lib/analysis-api";
 import { errorMessage } from "@/lib/errors";
+import { AUTO_READ } from "@/lib/auto-read";
 import { usd } from "@/lib/format";
 
 import { useCurrentAnalysis } from "./context";
@@ -25,8 +26,8 @@ const pick = "rounded-full bg-white px-3 py-1 text-sm text-foreground ring-1 rin
 export function RankPanel({ creators, onScored }: { creators: Creator[]; onScored: () => void }) {
   const { analysis, adopt } = useCurrentAnalysis();
   const { enrich, scoring } = analysis.creators;
-  const [count, setCount] = useState(10);
-  const [videos, setVideos] = useState(5);
+  const [count, setCount] = useState<number>(AUTO_READ.creators);
+  const [videos, setVideos] = useState<number>(AUTO_READ.videos);
   const [price, setPrice] = useState<{ key: string; data: EnrichEstimate } | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +57,21 @@ export function RankPanel({ creators, onScored }: { creators: Creator[]; onScore
     // `key` identifies the names and the video count
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis.id, key, tooBig]);
+
+  // The Search page can ask for the read and the scoring to start as soon as the list is here (?auto=1). Only once, only
+  // when the price is known and covered, and never for creators that have already been read.
+  const auto = useRef(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("auto") !== "1") return;
+    auto.current = true;
+    window.history.replaceState(null, "", window.location.pathname); // a reload must not start it again
+  }, []);
+  useEffect(() => {
+    if (!auto.current || busy || !fresh || names.length === 0) return;
+    auto.current = false;
+    if (tooBig || tooPricey || creators.slice(0, count).some((c) => c.metrics)) return;
+    void run();
+  });
 
   // reading finished -> hand the same creators to the scoring
   const scoringStatus = scoring.status;
