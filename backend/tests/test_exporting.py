@@ -15,7 +15,7 @@ def rows(text):
 class CsvTest(unittest.TestCase):
     def test_ranked_first_then_the_rest_and_no_bio(self):
         a = {"username": "a", "nickname": "Alpha", "url": "https://www.tiktok.com/@a", "followers": 10, "bio": "โทร [hidden]", "median_views": 5, "last_post": "2026-10-01T00:00:00+00:00"}
-        b = dict(a, username="b", nickname="Beta", followers=99, rank=1, total=80, score={"relevance": 90, "engagement": 70, "audience": 60, "activity": 50, "confidence": "low", "reason": "good", "audience_reason": "x", "flags": ["w1", "w2"]},
+        b = dict(a, username="b", nickname="Beta", followers=99, rank=1, total=80, score={"relevance": 90, "engagement": 70, "audience": 60, "activity": 50, "confidence": "low", "viewers": {"age": "18-24", "gender": "mostly women", "interests": ["Desserts", "Cafes"]}, "reason": "good", "audience_reason": "x", "flags": ["w1", "w2"]},
                  metrics={"median_views": 700, "median_er": 0.0512, "posts_per_week": 3.5, "last_post": "2026-10-29T10:00:00+00:00", "ad_share": 0.2, "videos": 5})
         text = exporting.creators_csv([a, b])
         self.assertTrue(text.startswith("\ufeff"))
@@ -26,6 +26,8 @@ class CsvTest(unittest.TestCase):
         first = dict(zip(head, table[1]))
         self.assertEqual((first["rank"], first["total_score"], first["typical_views"], first["engagement_rate_pct"], first["last_post"], first["warnings"]), ("1", "80", "700", "5.1", "2026-10-29", "w1 | w2"))
         self.assertEqual(dict(zip(head, table[2]))["total_score"], "")
+        self.assertEqual((first["audience_age_estimated"], first["audience_gender_estimated"], first["audience_interests_estimated"]), ("18-24", "mostly women", "Desserts, Cafes"))
+        self.assertEqual(dict(zip(head, table[2]))["audience_age_estimated"], "")  # a creator that was never scored has no guess
 
     def test_a_cell_can_never_be_a_formula(self):
         c = {"username": "x", "nickname": "=HYPERLINK(\"http://evil\")", "url": "u", "followers": 1, "median_views": 1, "last_post": None}

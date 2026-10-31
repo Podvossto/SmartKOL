@@ -9,6 +9,7 @@ import { formatCount } from "@/lib/format";
 
 import { CreatorAvatar, VideoCover } from "./creator-avatar";
 import { viewsOf } from "./creator-sort";
+import { viewersLine } from "./score-cell";
 import { FlagBadge } from "./flag-badge";
 import { KindBadge } from "./kind-badge";
 import { creatorHref } from "./creator-table";
@@ -42,6 +43,11 @@ function CreatorCard({ analysisId, creator: c }: { analysisId: string; creator: 
         </a>
       </div>
       <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">{c.bio || "No bio."}</p>
+      {c.score?.viewers && (
+        <p className="text-xs text-muted-foreground">
+          Likely viewers (estimated): <b className="font-medium text-foreground">{viewersLine(c.score.viewers, true)}</b>
+        </p>
+      )}
       {covers.length > 0 && (
         // one video fills the strip; several share it in three columns
         <div className={covers.length === 1 ? "overflow-hidden rounded-2xl" : "grid grid-cols-3 gap-1.5 overflow-hidden rounded-2xl"}>

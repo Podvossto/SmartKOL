@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest import mock
 
-from app import apify_runner, discovery, scoring
+from app import analyses, apify_runner, discovery, scoring
 from app.clients import UpstreamError
 from app.llm import Completion
 from tests.test_analyses import SITE, ApiTestCase
@@ -81,6 +81,20 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(list(judged), ["amy"])  # bob's safety is not a number; ghost was never asked about
         self.assertEqual((judged["amy"]["audience"], judged["amy"]["confidence"], usage["cost_usd"]), (65, "medium", 0.0006))
 
+    def test_the_guessed_viewers_are_read_back_and_cleaned(self):
+        rows = {"amy": {"age": " 18-24 ", "gender": "mostly women", "interests": ["Desserts", "Cafes", "Travel", "Extra"]},
+                "bob": {"age": "25-34", "gender": "mostly dogs", "interests": "not a list"}}
+        with mock.patch.object(scoring.llm, "complete", side_effect=reply(**rows)):
+            judged, _ = scoring.judge(None, self.cfg, self.profile, self.creators("amy", "bob"))
+        self.assertEqual(judged["amy"]["viewers"], {"age": "18-24", "gender": "mostly women", "interests": ["Desserts", "Cafes", "Travel"]})
+        self.assertEqual(judged["bob"]["viewers"], {"age": "25-34", "gender": "", "interests": []})  # an unknown gender is dropped, not kept
+
+    def test_a_reply_without_viewers_still_scores(self):
+        with mock.patch.object(scoring.llm, "complete", side_effect=reply(amy={})):
+            judged, _ = scoring.judge(None, self.cfg, self.profile, self.creators("amy"))
+        self.assertIsNone(judged["amy"]["viewers"])
+        self.assertEqual(judged["amy"]["audience"], 65)
+
     def test_scores_are_kept_in_range(self):
         with mock.patch.object(scoring.llm, "complete", side_effect=reply(amy={"audience": 140, "style": -5})):
             judged, _ = scoring.judge(None, self.cfg, self.profile, self.creators("amy"))
@@ -133,6 +147,20 @@ class ScoreApiTest(ApiTestCase):
             self.assertEqual(complete.call_count, 1)  # judged once, not again
             self.score(redo=True)
             self.assertEqual(complete.call_count, 2)
+
+    def test_a_judgement_from_before_viewers_were_asked_is_refreshed_once(self):
+        self.read()
+        with mock.patch.object(scoring.llm, "complete", side_effect=reply(amy={}, bob={})) as complete:
+            self.score()
+            def drop_viewers(s):
+                for c in s["creators"]["items"]:
+                    c["judged"].pop("viewers", None)
+            analyses.update(self.aid, drop_viewers)  # what an analysis scored by an older version holds
+            self.score()
+            self.assertEqual(complete.call_count, 2)  # asked again for both
+            self.assertEqual(self.listing()["kept"][0]["score"]["viewers"], None)  # the reply had no viewers; recorded as asked
+            self.score()
+            self.assertEqual(complete.call_count, 2)  # and not a third time
 
     def test_changing_the_weights_changes_the_ranking_for_free(self):
         self.read()

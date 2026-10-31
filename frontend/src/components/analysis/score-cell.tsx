@@ -15,3 +15,9 @@ export function ScoreCell({ value, strong, estimated }: { value: number | undefi
     </span>
   );
 }
+
+/** The model's guess at who watches a creator, in a few words: "18-24 · mostly women". Empty when there is none. */
+export function viewersLine(viewers: { age: string; gender: string; interests: string[] } | null | undefined, withInterests = false): string {
+  if (!viewers) return "";
+  return [viewers.age, viewers.gender, withInterests && viewers.interests.join(", ")].filter(Boolean).join(" · ");
+}

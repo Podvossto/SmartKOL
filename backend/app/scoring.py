@@ -116,11 +116,12 @@ Give each creator these scores, 0-100:
 - safety: how safe is the match for the brand? Lower it for conflicts the brand wants to avoid, content that clashes with the brand's image, or a creator who mainly promotes competitors.
 - audience: how likely is it that their audience is the brand's target audience (age, interests, lifestyle)? This is an ESTIMATE from content only; nobody can see a TikTok creator's real audience, so stay near the middle unless the content clearly points one way.
 - confidence: "low", "medium" or "high" for the audience estimate (high only when the captions and bio clearly say who the audience is).
+- viewers: your best guess at who watches them, from the content only: age (ONE range such as "18-24"), gender ("mostly women", "mostly men" or "mixed") and 2-3 interests (short English labels). Always give a guess, and set confidence to "low" when the content does not say; it is an estimate, never a fact.
 Be strict: 80+ means a clear, specific fit. Most creators should land between 30 and 75.
 reason: at most 25 words, English, why this creator fits or not, naming the strongest evidence. audience_reason: at most 15 words.
 
 Reply with ONE JSON array and nothing else, one object per creator, in this shape:
-[{"u": "<username>", "category": int, "style": int, "product": int, "safety": int, "audience": int, "confidence": "low"|"medium"|"high", "reason": str, "audience_reason": str}]"""
+[{"u": "<username>", "category": int, "style": int, "product": int, "safety": int, "audience": int, "confidence": "low"|"medium"|"high", "age": str, "gender": "mostly women"|"mostly men"|"mixed", "interests": [str], "reason": str, "audience_reason": str}]"""
 
 
 prompts.register(prompts.Prompt(
@@ -152,6 +153,18 @@ def _creator_line(c: dict) -> str:
             f"median views {m['median_views']}, ads {m['ad_share']:.0%}, TikTok Shop {m['shop_share']:.0%} | label: {c.get('kind') or 'unknown'}")
 
 
+GENDERS = ("mostly women", "mostly men", "mixed")
+
+
+def _viewers(row: dict) -> dict | None:
+    """The model's guess at who watches a creator (age range, gender lean, interests), or None when it gave nothing usable."""
+    age = " ".join(str(row.get("age") or "").split())[:20]
+    gender = row.get("gender") if row.get("gender") in GENDERS else ""
+    raw = row.get("interests")
+    interests = [" ".join(str(i).split())[:30] for i in raw if isinstance(i, str) and i.strip()][:3] if isinstance(raw, list) else []
+    return {"age": age, "gender": gender, "interests": interests} if age or gender or interests else None
+
+
 def _pct(value) -> int | None:
     return min(max(int(value), 0), 100) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
@@ -179,7 +192,8 @@ def judge(http: httpx.Client, cfg, profile: dict, creators: list[dict]) -> tuple
             subs = {k: _pct(row.get(k)) for k in ("category", "style", "product", "safety", "audience")}
             if name in known and None not in subs.values():
                 judged[name] = {**subs, "confidence": row.get("confidence") if row.get("confidence") in ("low", "medium", "high") else "low",
-                                "reason": str(row.get("reason") or "")[:200], "audience_reason": str(row.get("audience_reason") or "")[:140]}
+                                "reason": str(row.get("reason") or "")[:200], "audience_reason": str(row.get("audience_reason") or "")[:140],
+                                "viewers": _viewers(row)}
     return judged, usage
 
 
@@ -209,7 +223,7 @@ def build(creators: list[dict]) -> int:
         act, act_note, act_flags = activity(c)
         c["score"] = {"relevance": rel, "engagement": eng, "audience": j["audience"], "activity": act,
                       "category": j["category"], "style": j["style"], "product": j["product"], "safety": j["safety"],
-                      "reason": j["reason"], "audience_reason": j["audience_reason"], "confidence": j["confidence"],
+                      "reason": j["reason"], "audience_reason": j["audience_reason"], "confidence": j["confidence"], "viewers": j.get("viewers"),
                       "engagement_note": eng_note, "activity_note": act_note, "flags": rel_flags + act_flags,
                       "model": j.get("model"), "scored_at": now}
         scored += 1
@@ -245,7 +259,7 @@ def run(aid: str, usernames: list[str], redo: bool) -> None:
         analyses.update(aid, lambda s: s["creators"]["scoring"].update(status="error", error=message))
     if not cfg:
         return fail("No language model is set. Add one in Settings first.")
-    todo = [c for c in state["creators"]["items"] if c["username"] in usernames and c.get("metrics") and (redo or not c.get("judged"))]
+    todo = [c for c in state["creators"]["items"] if c["username"] in usernames and c.get("metrics") and (redo or not c.get("judged") or "viewers" not in c["judged"])]  # a judgement from before viewers were asked is asked again once
     judged, usage = {}, {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "model": cfg.model}
     try:
         if todo:

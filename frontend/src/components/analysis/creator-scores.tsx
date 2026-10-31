@@ -1,5 +1,8 @@
-import type { Creator } from "@/lib/analysis-api";
+"use client";
 
+import type { Creator, Profile } from "@/lib/analysis-api";
+
+import { useCurrentAnalysis } from "./context";
 import { Origin } from "./origin";
 import { Eyebrow } from "./panel";
 import { ScoreCell } from "./score-cell";
@@ -11,6 +14,27 @@ const RUBRIC = [
   ["product", "Products"],
   ["safety", "Brand safety"],
 ] as const;
+
+/** Who the model guesses watches this creator, set beside who the brand wants to reach. Both are estimates. */
+function Viewers({ viewers }: { viewers?: NonNullable<Creator["score"]>["viewers"] }) {
+  const { analysis } = useCurrentAnalysis();
+  const target = (analysis.profile as Profile | null)?.audience;
+  if (!viewers) return null;
+  const guess = [viewers.age && `Age ${viewers.age}`, viewers.gender, viewers.interests.length > 0 && viewers.interests.join(", ")].filter(Boolean).join(" · ");
+  const aim = target ? [target.age_range && `Age ${target.age_range}`, target.gender].filter(Boolean).join(" · ") : "";
+  return (
+    <dl className="grid gap-x-4 gap-y-1 rounded-xl bg-muted/50 px-3 py-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+      <dt className="text-muted-foreground">Likely viewers (estimated)</dt>
+      <dd>{guess}</dd>
+      {aim && (
+        <>
+          <dt className="text-muted-foreground">The brand wants to reach</dt>
+          <dd>{aim}</dd>
+        </>
+      )}
+    </dl>
+  );
+}
 
 function Axis({ title, hint, value, estimated, ai, model, children }: { title: string; hint: string; value: number; estimated?: boolean; ai?: boolean; model?: string | null; children: React.ReactNode }) {
   return (
@@ -64,6 +88,7 @@ export function CreatorScores({ creator: c }: { creator: Creator }) {
         </Axis>
         <Axis title={AXIS_LABELS.audience.name} hint={AXIS_LABELS.audience.hint} value={s.audience} estimated ai model={s.model}>
           <p>{s.audience_reason || "No reason given."}</p>
+          <Viewers viewers={s.viewers} />
           <p className="text-xs text-muted-foreground">Estimated, confidence {s.confidence}. TikTok does not show who watches a creator.</p>
         </Axis>
         <Axis title={AXIS_LABELS.activity.name} hint={AXIS_LABELS.activity.hint} value={s.activity}>

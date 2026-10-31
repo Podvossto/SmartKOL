@@ -11,7 +11,7 @@ import { CreatorAvatar } from "./creator-avatar";
 import { FlagBadge } from "./flag-badge";
 import { KindBadge } from "./kind-badge";
 import { type Sort, type SortKey, viewsOf } from "./creator-sort";
-import { ScoreCell } from "./score-cell";
+import { ScoreCell, viewersLine } from "./score-cell";
 
 export const creatorHref = (analysisId: string, c: Creator) => `/analysis/${analysisId}/creators/${encodeURIComponent(c.username)}`;
 
@@ -119,6 +119,11 @@ export function CreatorTable({ analysisId, creators, sort, onSort }: { analysisI
                   </td>
                   <td className="hidden px-3 py-3 xl:table-cell">
                     <ScoreCell value={c.score?.audience} estimated />
+                    {c.score?.viewers && (
+                      <span className="mt-1 block max-w-28 truncate text-[11px] text-muted-foreground" title={`Likely viewers (estimated): ${viewersLine(c.score.viewers, true)}`}>
+                        {viewersLine(c.score.viewers)}
+                      </span>
+                    )}
                   </td>
                   <td className="hidden px-3 py-3 xl:table-cell">
                     <ScoreCell value={c.score?.activity} />

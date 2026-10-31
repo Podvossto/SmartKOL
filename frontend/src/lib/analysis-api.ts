@@ -92,6 +92,8 @@ export type Score = Record<Axis, number> & {
   reason: string;
   audience_reason: string;
   confidence: "low" | "medium" | "high";
+  /** The model's guess at who watches this creator; absent on scores made before it was asked. */
+  viewers?: { age: string; gender: string; interests: string[] } | null;
   engagement_note: string;
   activity_note: string;
   flags: string[];
