@@ -1,9 +1,7 @@
 "use client";
 
-import { Check, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-import { PlatformIcon } from "@/components/platform-icon";
 import { Disclosure } from "@/components/ui/disclosure";
 import { PillButton } from "@/components/ui/pill-button";
 import type { Profile } from "@/lib/analysis-api";
@@ -14,7 +12,7 @@ import { BrandBanner, BrandGallery } from "./brand-media";
 import { useCurrentAnalysis } from "./context";
 import { IdealCreator } from "./ideal-creator";
 import { Origin } from "./origin";
-import { ChipList, Eyebrow, FactRow, Rise } from "./panel";
+import { Eyebrow, FactRow, Rise } from "./panel";
 import { SourceDetails } from "./source-details";
 
 const TIER_LABEL = { budget: "Budget", mid: "Mid-range", premium: "Premium", unknown: "" } as const;
@@ -31,17 +29,6 @@ const age = (range: string) => (!known(range) ? "" : /^[\d\s–—-]+\+?$/.test(
 const gender = (value: string) => (!known(value) ? "" : value.trim().charAt(0).toUpperCase() + value.trim().slice(1));
 const known = (text: string) => !/^(not stated|unknown|n\/a)/i.test(text.trim()); // older profiles hold a placeholder instead of an estimate
 
-/** One item per line, for entries that are phrases (they may contain commas, so a comma-joined list would blur them). */
-function Lines({ items }: { items: string[] }) {
-  return (
-    <ul className="flex flex-col gap-1">
-      {items.map((item) => (
-        <li key={item}>{item}</li>
-      ))}
-    </ul>
-  );
-}
-
 /** A section of the brief: small title, then its content. The whole brief is marked as AI-written once, at the top. */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -49,79 +36,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <Eyebrow>{title}</Eyebrow>
       {children}
     </div>
-  );
-}
-
-function Rules({ title, items, kind }: { title: string; items: string[]; kind: "do" | "dont" }) {
-  const Icon = kind === "do" ? Check : X;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">{title}</p>
-      <ul className="flex flex-col gap-1.5 text-sm">
-        {items.map((item) => (
-          <li key={item} className="flex gap-2">
-            <Icon className={cn("mt-0.5 size-4 shrink-0", kind === "do" ? "text-emerald-600" : "text-destructive")} strokeWidth={2} />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function FullProfile({ profile }: { profile: Profile }) {
-  const block = (title: string, body: React.ReactNode) => (
-    <div className="flex flex-col gap-2.5">
-      <Eyebrow>{title}</Eyebrow>
-      {body}
-    </div>
-  );
-  return (
-    <>
-      {block("Products & services", <Lines items={profile.products} />)}
-      {block("Audience persona", <>
-        <p className="text-[15px]">{profile.audience.description}</p>
-        <p className="text-sm text-muted-foreground">{profile.audience.lifestyle}</p>
-        <ChipList items={profile.audience.interests} />
-        {profile.audience.media_habits.length > 0 && <p className="text-sm text-muted-foreground">Media habits: {list(profile.audience.media_habits)}</p>}
-      </>)}
-      {(profile.voice.style || profile.voice.dos.length > 0 || profile.voice.donts.length > 0) &&
-        block("Voice guidelines", <>
-          {profile.voice.style && <p className="text-[15px]">{profile.voice.style}</p>}
-          {(profile.voice.dos.length > 0 || profile.voice.donts.length > 0) && (
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Rules title="Do" items={profile.voice.dos} kind="do" />
-              <Rules title="Don't" items={profile.voice.donts} kind="dont" />
-            </div>
-          )}
-        </>)}
-      {profile.formats.length > 0 && block("Content formats", <ChipList items={profile.formats} />)}
-      {profile.evidence.length > 0 &&
-        block("What this is based on", (
-          <ul className="flex flex-col gap-2 text-sm">
-            {profile.evidence.map((e) => (
-              <li key={e.fact} className="flex gap-2.5">
-                <span className="mt-0.5 flex shrink-0 gap-1">
-                  {e.source !== "facebook" && <PlatformIcon platform="website" className="size-3.5" />}
-                  {e.source !== "website" && <PlatformIcon platform="facebook" className="size-3.5" />}
-                </span>
-                <span>{e.fact}</span>
-              </li>
-            ))}
-          </ul>
-        ))}
-      {profile.gaps.length > 0 &&
-        block("Not found in the sources", (
-          <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
-            {profile.gaps.map((gap) => (
-              <li key={gap} className="flex gap-2.5">
-                <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-amber-400" />
-                <span>{gap}</span>
-              </li>
-            ))}
-          </ul>
-        ))}
-    </>
   );
 }
 
@@ -212,9 +126,6 @@ export function ProfileOverview() {
       )}
 
       <Rise index={5} className="flex flex-col gap-3">
-        <Disclosure title="Full brand profile" hint="persona, voice guidelines, evidence, gaps">
-          <FullProfile profile={profile} />
-        </Disclosure>
         <Disclosure title="Sources" hint={sources.length > 1 ? "website and Facebook, side by side" : sources[0] === "website" ? "website" : "Facebook"}>
           <SourceDetails analysis={analysis} />
         </Disclosure>
