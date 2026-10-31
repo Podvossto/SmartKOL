@@ -42,5 +42,5 @@
 - **No hardcoded account** — every external service (Apify, LLM provider, OpenRouter) is configured by the user in Settings or `credential/.env`; keys are never logged or returned in full.
 - **UI is English, data stays Thai** — never translate creator names, captions or hashtags.
 - **Every number shown in the UI or docs is measured or labelled** — LLM guesses (e.g. audience fit) are labelled "estimated"; costs come from a real run or the provider's price list.
-- **Privacy** — keep only public, business-relevant fields; mask phone numbers/emails found in creator bios.
+- **Privacy** — keep only public, business-relevant fields; creators' bios stay as posted (contact details there are for work enquiries); phone numbers/emails are masked in captions and never sent to the model.
 - **Tooling** — frontend uses npm (`package-lock.json`); backend uses its own `.venv`. Before proposing a commit run: backend `python -m unittest discover -s tests -t .`, frontend `npx tsc --noEmit` and `npx eslint .`.
