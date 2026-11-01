@@ -27,7 +27,7 @@ You need Docker and an [Apify](https://apify.com) account (the free plan is enou
 
 ## How it works
 - Website or Facebook link → brand brief (AI) → hashtags you pick → TikTok search (Apify) → filters → latest videos of the top creators (Apify) → scores (AI + the app's own math) → ranked list and CSV
-- Four scores out of 100: **brand fit** (the AI judges category, style, products and brand safety), **engagement** (likes, comments and shares per view, compared with creators of a similar size), **audience fit** (an AI estimate) and **activity** (how often and how recently they post, ads, steady views)
+- Four scores out of 100: **brand fit** (the AI judges category, style, products and brand safety), **engagement** (likes, comments and shares per view, compared with the other creators of a similar size in the same search, not with the whole market), **audience fit** (an AI estimate) and **activity** (how often and how recently they post, ads, steady views)
 - Suggested weights are 40 / 25 / 20 / 15. You can change them and the ranking updates for free
 - The **How it works** button in the app shows every step and who does it
 
@@ -52,6 +52,9 @@ Apify bills the data: a Facebook page about $0.06, TikTok $0.0037 per video plus
 
 ## Privacy and ethics
 - Only public data is used. Nothing needs a login, and no one is contacted
+- TikTok's [terms of service](https://www.tiktok.com/legal/page/us/terms-of-service/en) do not allow automated collection without its written approval, and its official research API is open only to eligible researchers. This prototype uses Apify's scrapers to show the method; a production version should use an approved data route
+- Creators' names, bios and videos are personal data under Thailand's PDPA, so a real deployment needs a lawful basis for holding them and a way to tell creators and remove them on request
+- Apify results are cached for 7 days; an analysis, with the creators it holds, stays until you delete it
 - A bio is shown as the creator posted it, so the contact details they publish for work enquiries are there, and the CSV has a column for them. Phone numbers and e-mails are hidden in video captions and are never sent to the AI model
 - Pictures are fetched and kept by the server, not loaded from TikTok by your browser
 - Your keys are encrypted on disk and never shown in full. Deleting an analysis removes it
@@ -64,7 +67,7 @@ cd frontend && npx tsc --noEmit && npx eslint .
 ```
 
 ## Sources and credits
-- Data: Apify actors [apify/facebook-pages-scraper](https://apify.com/apify/facebook-pages-scraper), [apify/facebook-posts-scraper](https://apify.com/apify/facebook-posts-scraper) and [clockworks/tiktok-scraper](https://apify.com/clockworks/tiktok-scraper). TikTok's official APIs are open only to approved partners and researchers, which is why a scraper is used
+- Data: Apify actors [apify/facebook-pages-scraper](https://apify.com/apify/facebook-pages-scraper), [apify/facebook-posts-scraper](https://apify.com/apify/facebook-posts-scraper) and [clockworks/tiktok-scraper](https://apify.com/clockworks/tiktok-scraper). TikTok's [Research API](https://developers.tiktok.com/products/research-api/) is open only to eligible non-commercial researchers, which is why a scraper is used
 - Built with [Playwright](https://playwright.dev), [FastAPI](https://fastapi.tiangolo.com), [Next.js](https://nextjs.org), [Tailwind CSS](https://tailwindcss.com), [shadcn/ui](https://ui.shadcn.com) and [Lucide](https://lucide.dev); models through [OpenRouter](https://openrouter.ai) (sign-in uses its OAuth PKCE flow)
 - The Facebook and TikTok marks are from [Simple Icons](https://simpleicons.org) (CC0)
 
