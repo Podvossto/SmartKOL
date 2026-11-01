@@ -1,6 +1,7 @@
 """The ranked creator list as a CSV file a marketer can open in Excel or Sheets.
 
-Only public, business-relevant fields go in: no bio (it can carry contact details), no picture links.
+Only public, business-relevant fields go in: no bio text and no picture links; the contact details a creator
+published in their bio get a column of their own, since reaching them is what the list is for.
 """
 import csv
 import io
